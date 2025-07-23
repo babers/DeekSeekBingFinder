@@ -11,8 +11,10 @@ from data_manager import DataManager
 
 def main():
     data_manager = DataManager()
-    browser_controller = BrowserController(data_manager)
-    gui = GUI(data_manager, browser_controller)  # Pass both dependencies
+    gui = None
+    browser_controller = BrowserController(data_manager)  # Temporary, will be replaced
+    gui = GUI(data_manager, browser_controller)
+    browser_controller.gui = gui  # Set the GUI reference for topic updates
     gui.start()
 
 if __name__ == "__main__":

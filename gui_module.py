@@ -24,21 +24,21 @@ class GUI:
         # Main container
         main_frame = tk.Frame(self.root, padx=20, pady=20)
         main_frame.pack(expand=True, fill=tk.BOTH)
-        
+
         # Stats Frame
         stats_frame = ttk.LabelFrame(main_frame, text="Current Status")
         stats_frame.pack(fill=tk.X, pady=5)
-        
+
         self.total_label = ttk.Label(stats_frame, text="Total Searches: 0")
         self.total_label.pack(side=tk.LEFT, padx=10, pady=5)
-        
+
         self.rewards_label = ttk.Label(stats_frame, text="Rewards Points: 0")
         self.rewards_label.pack(side=tk.LEFT, padx=10, pady=5)
-        
+
         # Control Frame
         control_frame = ttk.LabelFrame(main_frame, text="Controls")
         control_frame.pack(fill=tk.X, pady=5)
-        
+
         self.start_btn = ttk.Button(
             control_frame,
             text="Start Searching",
@@ -46,7 +46,7 @@ class GUI:
             width=15
         )
         self.start_btn.pack(side=tk.LEFT, padx=5, pady=5)
-        
+
         self.stop_btn = ttk.Button(
             control_frame,
             text="Stop",
@@ -55,19 +55,28 @@ class GUI:
             width=15
         )
         self.stop_btn.pack(side=tk.LEFT, padx=5, pady=5)
-        
+
+        # Topic Frame (below buttons)
+        topic_frame = ttk.LabelFrame(main_frame, text="Current Topic")
+        topic_frame.pack(fill=tk.X, pady=5)
+        self.topic_label = ttk.Label(topic_frame, text="Topic: None")
+        self.topic_label.pack(side=tk.LEFT, padx=10, pady=5)
+
         # Progress Frame
         progress_frame = ttk.LabelFrame(main_frame, text="Search Progress")
         progress_frame.pack(expand=True, fill=tk.BOTH, pady=5)
-        
+
         fig = Figure(figsize=(6, 4), dpi=100)
         self.ax = fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(fig, master=progress_frame)
         self.canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
-        
+
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+    def set_current_topic(self, topic):
+        if hasattr(self, 'topic_label'):
+            self.topic_label.config(text=f"Topic: {topic}")
         
     def start_searching(self):
         self.start_btn.config(state=tk.DISABLED)

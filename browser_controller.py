@@ -17,8 +17,9 @@ import re
 import traceback
 
 class BrowserController:
-    def __init__(self, data_manager):
+    def __init__(self, data_manager, gui=None):
         self.data_manager = data_manager
+        self.gui = gui  # Reference to GUI for updating topic
         self.running = False
         self.driver = None
         # self.search_terms = [
@@ -164,11 +165,18 @@ class BrowserController:
         
         while (self.running and 
             len(self.data_manager.searched_terms) < 300) and self.get_current_points() < 90 :
-            
+
             # Cycle through today's topics with variations
             base_topic = today_topics[len(self.data_manager.searched_terms) % num_topics]  # <-- UPDATED
             term = f"{base_topic}"
-            
+
+            # Update GUI with current topic
+            if self.gui is not None:
+                try:
+                    self.gui.set_current_topic(term)
+                except Exception as e:
+                    print(f"Error updating GUI topic: {e}")
+
             if term not in self.data_manager.searched_terms:
                 try:
                     self._perform_search(term)
@@ -178,7 +186,7 @@ class BrowserController:
                         self.data_manager.rewards = self.get_current_points()                        
                 except Exception as e:
                     print(f"Search error: {str(e)}")
-            
+
             sleep_time = random.uniform(5, 7)
             interval = 0.5
             elapsed = 0
