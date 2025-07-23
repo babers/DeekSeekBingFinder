@@ -22,25 +22,7 @@ class BrowserController:
         self.gui = gui  # Reference to GUI for updating topic
         self.running = False
         self.driver = None
-        # self.search_terms = [
-        #     # List of random search terms
-            
-        #     'Olympics', 'How memory works in the human brain', 'Mysterious stone structures around the world', 'The rise of eSports', 
-        #     'Animal species rediscovered after extinction', 'The science of aging', 'Paranormal investigations and their tools', 'The impact of AI on job markets', 
-        #     'Historical figures who changed the world', 'How solar flares affect Earth', 'The mystery of the Zodiac Killer', 'The psychology of cults', 
-        #     'How satellites communicate', 'The history of tattoos in different cultures', 'Unexplained mass animal deaths', 'The future of renewable energy', 
-        #     'The science behind dreams', 'How COVID-19 vaccines were developed', 'The lost treasure of the Knights Templar', 'Effects of deforestation on indigenous tribes', 
-        #     'Cryptography’s role in historical wars', 'How animals adapt to urban environments', 'The mystery of the Nazca Lines', 'The rise of plant-based meat alternatives', 'Unexplained spontaneous human combustion', 'Social media’s influence on politics', 
-        #     'Possibility of life on Europa (Jupiter’s moon)', 'How CRISPR is changing genetics', 
-        #     'The history of samurai warriors', 'Effects of sleep deprivation on health', 'The Oak Island Money Pit mystery', 'Global cultural impact of anime', 'Unexplained ancient artifacts', 'The future of space tourism', 
-        #     'The science of addiction', 'The Philadelphia Experiment conspiracy', 'How the human microbiome affects health', 'The history of the Freemasons', 'Mysterious sky lights (e.g., Hessdalen lights)', 'Fast fashion’s environmental impact', 
-        #     'How quantum entanglement works', 'Disappearance of Flight MH370', 'The science of placebo effects', 'Ancient civilizations’ knowledge of astronomy', 'Ethics of artificial intelligence', 'The mystery of the Taos Hum', 'Vertical farming’s role in agriculture', 
-        #     'History of the Rosetta Stone', 'Microplastics’ effect on human health', 'The science behind time perception', 
-        #     'Unexplained ghost ship sightings', 'Future of holographic technology', 'Psychology of color in marketing', 'How volcanoes predict eruptions', 'The Dancing Plague of 1518',
-        #     'AI advancements', 'space exploration', 'quantum computing', 'sustainable energy', 'global economics', 'modern architecture', 'marine biology', 'climate change', 'nanotechnology',
-        #     'renewable resources'
-        # ]
-        
+             
         self.topics_provider = DailyTopics()  # <-- NEW TOPICS HANDLER INSTANCE
         self.last_points = None 
         import threading
@@ -60,11 +42,7 @@ class BrowserController:
         edge_driver_path = 'msedgedriver.exe'  # Replace with actual path
         edge_service = Service(executable_path=edge_driver_path)  # Updated syntax
         self.driver = webdriver.Edge(service=edge_service)
-        
-    
-       # from webdriver_manager.microsoft import EdgeChromiumDriverManager
-       # self.driver = webdriver.Edge(service=Service(EdgeChromiumDriverManager().install()))
-    
+
     
     def get_current_points(self):
         """Public method to fetch current reward points"""
@@ -112,26 +90,7 @@ class BrowserController:
             if self.driver:
                 self.driver.save_screenshot("error_screenshot.png")
             return self.last_points if self.last_points is not None else 0
-    
-    # def get_current_points(self):
-    #     """Public method to fetch current reward points"""
-    #     try:
-    #         if not self.driver:
-    #             self._setup_driver()
-                
-    #         self.driver.get("https://rewards.bing.com/pointsbreakdown")
-    #         time.sleep(3)
-    #         points_element = self.driver.find_element(
-    #             By.CSS_SELECTOR,
-    #             '[class="pointsDetail c-subheading-3 ng-binding"]'
-    #         )
-            
-    #         print("************  PC Search Points Balance **************** :", points_element.text[:2])         
-    #         return int(points_element.text[:2])
-    
-    #     except Exception as e:
-    #         print(f"Error retrieving points: {str(e)}")
-    #         return 0
+
             
     def _generate_search_term(self):
         return f"{random.choice(self.search_terms)}"
@@ -202,18 +161,6 @@ class BrowserController:
                 self.driver.quit()
             except Exception as e:
                 print(f"Error quitting driver: {str(e)}")
-      
-      
-    # def _search_loop(self):
-    #     while self.running and len(self.data_manager.searched_terms) < 100:
-    #         term = self._generate_search_term()
-    #         if term not in self.data_manager.searched_terms:
-    #             self._perform_search(term)
-    #             self.data_manager.add_search(term)
-    #         time.sleep(random.uniform(5, 10))
-            
-    #     if self.driver:
-    #         self.driver.quit()
               
     def stop_searching(self):
         """Stop the search process and quit the browser driver."""
