@@ -121,13 +121,15 @@ class BrowserController:
         """Search loop using today's specific topics"""
         today_topics = self.topics_provider.get_topics_for_today()  # <-- NEW TOPICS SOURCE
         num_topics = len(today_topics)
-        
-        while (self.running and 
-            len(self.data_manager.searched_terms) < 300) and self.get_current_points() < 90 :
+        search_count = 0
+        topic_index = 0
 
-            # Cycle through today's topics with variations
-            base_topic = today_topics[len(self.data_manager.searched_terms) % num_topics]  # <-- UPDATED
-            term = f"{base_topic}"
+        while self.running and search_count < 300 and self.get_current_points() < 90:
+            # Restart topic search from beginning after all topics are used
+            if topic_index >= num_topics:
+                topic_index = 0
+            term = today_topics[topic_index]
+            topic_index += 1
 
             # Update GUI with current topic
             if self.gui is not None:
@@ -136,15 +138,14 @@ class BrowserController:
                 except Exception as e:
                     print(f"Error updating GUI topic: {e}")
 
-            if term not in self.data_manager.searched_terms:
-                try:
-                    self._perform_search(term)
-                    self.data_manager.add_search(term,rewards=self.get_current_points()) # added rewards parameter by Baber
-                    # Update points every 15 searches
-                    if len(self.data_manager.searched_terms) % 15 == 0:
-                        self.data_manager.rewards = self.get_current_points()                        
-                except Exception as e:
-                    print(f"Search error: {str(e)}")
+            try:
+                self._perform_search(term)
+                self.data_manager.add_search(term, rewards=self.get_current_points())
+                search_count += 1
+                if search_count % 15 == 0:
+                    self.data_manager.rewards = self.get_current_points()
+            except Exception as e:
+                print(f"Search error: {str(e)}")
 
             sleep_time = random.uniform(5, 7)
             interval = 0.5
