@@ -1,0 +1,8 @@
+# .gitignore for DeekSeekBingFinder
+__pycache__/
+*.pyc
+error_screenshot.png
+debug.png
+.env
+.DS_Store
+*.log
