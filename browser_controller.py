@@ -121,10 +121,9 @@ class BrowserController:
         """Search loop using today's specific topics"""
         today_topics = self.topics_provider.get_topics_for_today()  # <-- NEW TOPICS SOURCE
         num_topics = len(today_topics)
-        search_count = 0
         topic_index = 0
 
-        while self.running and search_count < 300 and self.get_current_points() < 90:
+        while self.running and self.get_current_points() < 90:
             # Restart topic search from beginning after all topics are used
             if topic_index >= num_topics:
                 topic_index = 0
@@ -141,8 +140,7 @@ class BrowserController:
             try:
                 self._perform_search(term)
                 self.data_manager.add_search(term, rewards=self.get_current_points())
-                search_count += 1
-                if search_count % 15 == 0:
+                if len(self.data_manager.searched_terms) % 15 == 0:
                     self.data_manager.rewards = self.get_current_points()
             except Exception as e:
                 print(f"Search error: {str(e)}")
