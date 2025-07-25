@@ -14,25 +14,25 @@ class DataManager:
         self.start_time = time.time()
         self.search_history = []
         self.rewards = 0
+        self.total_searches = 0  # Track all searches, including duplicates
         
-    def add_search(self, term, rewards=None):  # added rewards=None by baber
+    def add_search(self, term, rewards=None):
+        self.total_searches += 1
         if term not in self.searched_terms:
             self.searched_terms.add(term)
-            # self.rewards += 1  # Microsoft Rewards typically gives 3-5 points per search
-         
-            if rewards is not None:
-                self.rewards = rewards                       
-            self.search_history.append({
-                'timestamp': datetime.now(),
-                'count': len(self.searched_terms),
-                'rewards': self.rewards
-            })
+        if rewards is not None:
+            self.rewards = rewards
+        self.search_history.append({
+            'timestamp': datetime.now(),
+            'count': self.total_searches,
+            'rewards': self.rewards
+        })
             
     def get_progress_data(self):
         return [(entry['timestamp'], entry['count']) for entry in self.search_history]
     
     def get_current_counts(self):
         return {
-            'total': len(self.searched_terms),
+            'total': self.total_searches,
             'rewards': self.rewards
         }
