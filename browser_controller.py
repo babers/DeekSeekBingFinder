@@ -118,10 +118,13 @@ class BrowserController:
   
         
     def _search_loop(self):
-        """Search loop using today's specific topics"""
-        today_topics = self.topics_provider.get_topics_for_today()  # <-- NEW TOPICS SOURCE
+        """Search loop using today's specific topics, with pause if points do not increase after 10 searches."""
+        today_topics = self.topics_provider.get_topics_for_today()
         num_topics = len(today_topics)
         topic_index = 0
+        last_points = self.get_current_points()
+        searches_since_last_increase = 0
+        pause_duration = 2 * 60  # 2 minutes in seconds
 
         while self.running and self.get_current_points() < 90:
             # Restart topic search from beginning after all topics are used
@@ -139,11 +142,44 @@ class BrowserController:
 
             try:
                 self._perform_search(term)
-                self.data_manager.add_search(term, rewards=self.get_current_points())
+                current_points = self.get_current_points()
+                self.data_manager.add_search(term, rewards=current_points)
                 if len(self.data_manager.searched_terms) % 15 == 0:
-                    self.data_manager.rewards = self.get_current_points()
+                    self.data_manager.rewards = current_points
             except Exception as e:
                 print(f"Search error: {str(e)}")
+
+            # Check if points increased
+            current_points = self.get_current_points()
+            if current_points > last_points:
+                last_points = current_points
+                searches_since_last_increase = 0
+            else:
+                searches_since_last_increase += 1
+
+            # If 5 searches without points increase, pause for 2 minutes
+            if searches_since_last_increase >= 5:
+                if self.gui is not None:
+                    try:
+                        self.gui.set_pause_timer(pause_duration)
+                    except Exception as e:
+                        print(f"Error updating GUI pause timer: {e}")
+                print(f"No points increase after 5 searches. Pausing for 2 minutes...")
+                remaining = pause_duration
+                while remaining > 0 and self.running and not self.stop_event.is_set():
+                    if self.gui is not None:
+                        try:
+                            self.gui.update_pause_timer(remaining)
+                        except Exception as e:
+                            print(f"Error updating GUI pause timer: {e}")
+                    time.sleep(1)
+                    remaining -= 1
+                if self.gui is not None:
+                    try:
+                        self.gui.clear_pause_timer()
+                    except Exception as e:
+                        print(f"Error clearing GUI pause timer: {e}")
+                searches_since_last_increase = 0
 
             sleep_time = random.uniform(5, 7)
             interval = 0.5
@@ -151,9 +187,9 @@ class BrowserController:
             while elapsed < sleep_time and not self.stop_event.is_set():
                 time.sleep(interval)
                 elapsed += interval
-        
-        print(f"*************** Quitting from Search Loop *************") 
-        self.data_manager.rewards = self.last_points # baber added this line to set last points July 17
+
+        print(f"*************** Quitting from Search Loop *************")
+        self.data_manager.rewards = self.last_points
         self.running = False
         if self.driver:
             try:

@@ -16,7 +16,7 @@ class GUI:
         self.browser_controller = browser_controller
         self.root = tk.Tk()
         self.root.title("Bing Search Automator")
-        
+        self.search_started = False
         self.setup_ui()
         self.schedule_update()
         
@@ -62,6 +62,12 @@ class GUI:
         self.topic_label = ttk.Label(topic_frame, text="Topic: None")
         self.topic_label.pack(side=tk.LEFT, padx=10, pady=5)
 
+        # Pause Timer Frame
+        pause_frame = ttk.LabelFrame(main_frame, text="Pause Timer")
+        pause_frame.pack(fill=tk.X, pady=5)
+        self.pause_timer_label = ttk.Label(pause_frame, text="")
+        self.pause_timer_label.pack(side=tk.LEFT, padx=10, pady=5)
+
         # Progress Frame
         progress_frame = ttk.LabelFrame(main_frame, text="Search Progress")
         progress_frame.pack(expand=True, fill=tk.BOTH, pady=5)
@@ -74,11 +80,28 @@ class GUI:
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+    def set_pause_timer(self, seconds):
+        if hasattr(self, 'pause_timer_label'):
+            mins, secs = divmod(seconds, 60)
+            self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+
+    def update_pause_timer(self, seconds):
+        if hasattr(self, 'pause_timer_label'):
+            mins, secs = divmod(seconds, 60)
+            self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+
+    def clear_pause_timer(self):
+        if hasattr(self, 'pause_timer_label'):
+            self.pause_timer_label.config(text="")
     def set_current_topic(self, topic):
         if hasattr(self, 'topic_label'):
             self.topic_label.config(text=f"Topic: {topic}")
+        # Update total searches in sync with topic update
+        self.update_display()
         
     def start_searching(self):
+        self.search_started = True
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
         Thread(target=self.browser_controller.start_searching, daemon=True).start()
@@ -90,7 +113,12 @@ class GUI:
         
     def update_display(self):
         counts = self.data_manager.get_current_counts()
-        self.total_label.config(text=f"Total Searches: {counts['total']}")
+        # Show 0 until search started, then show at least 1 after first search
+        if self.search_started and counts['total'] == 0:
+            total_searches_display = 1
+        else:
+            total_searches_display = counts['total']
+        self.total_label.config(text=f"Total Searches: {total_searches_display}")
         self.rewards_label.config(text=f"Rewards Points: {counts['rewards']}")
         
         # Update graph: X axis = rewards points, Y axis = searches completed
