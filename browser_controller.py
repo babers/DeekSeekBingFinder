@@ -1,11 +1,15 @@
 # browser_controller.py
+
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 import random
 import time
-import threading 
+import threading
 from daily_topics import DailyTopics
 import re
 import traceback
@@ -32,31 +36,25 @@ class BrowserController:
         self.driver = webdriver.Edge(service=edge_service)
 
     
+
     def get_current_points(self):
         """Public method to fetch current reward points"""
         try:
             if not self.driver:
                 self._setup_driver()
             self.driver.get("https://rewards.bing.com/pointsbreakdown")
-
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.common.exceptions import TimeoutException
-
-            wait = WebDriverWait(self.driver, 30)  # Increased to 30 seconds
+            wait = WebDriverWait(self.driver, 30)
             try:
                 points_element = wait.until(
                     EC.visibility_of_element_located((By.CLASS_NAME, "pointsDetail"))
                 )
-            except TimeoutException:
+            except TimeoutException as e:
                 print("Timeout: Could not find points element. The page structure may have changed.")
                 if self.driver:
                     self.driver.save_screenshot("timeout_error.png")
-                    # Print a portion of the page source for debugging
                     page_source = self.driver.page_source
                     print("Page source (first 1000 chars):\n", page_source[:1000])
                 return self.last_points if self.last_points is not None else 0
-
             points_text = points_element.text
             match = re.search(r'\d+', points_text)
             if match:
@@ -66,14 +64,14 @@ class BrowserController:
                 return points
             else:
                 print("Could not find points in text:", points_text)
-                # Always return an integer (last_points if set, else 0)
                 return self.last_points if self.last_points is not None else 0
-        except Exception as e:
-            print(f"Error retrieving points: {type(e).__name__}: {e}")
-            traceback.print_exc()
-            # Optionally, take a screenshot for debugging:
+        except (TimeoutException, WebDriverException) as e:
+            print(f"Selenium error in get_current_points: {type(e).__name__}: {e}")
             if self.driver:
-                self.driver.save_screenshot("error_screenshot.png")
+                self.driver.save_screenshot("selenium_error.png")
+            return self.last_points if self.last_points is not None else 0
+        except Exception as e:
+            print(f"Unexpected error in get_current_points: {type(e).__name__}: {e}")
             return self.last_points if self.last_points is not None else 0
 
             
@@ -83,13 +81,18 @@ class BrowserController:
     def _perform_search(self, term):
         if not self.driver:
             self._setup_driver()
-        
-        self.driver.get('https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1')
-        search_box = self.driver.find_element(By.NAME, 'q')
-        #search_box.clear()
-        search_box.send_keys(term)
-        search_box.send_keys(Keys.RETURN)
-        time.sleep(5)  # Wait for search results to load     
+        try:
+            self.driver.get('https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1')
+            search_box = self.driver.find_element(By.NAME, 'q')
+            #search_box.clear()
+            search_box.send_keys(term)
+            search_box.send_keys(Keys.RETURN)
+            time.sleep(5)  # Wait for search results to load
+        except Exception as e:
+            # Handle navigation/network timeouts and log the error
+            print(f"Search navigation error: {type(e).__name__}: {e}")
+            if self.driver:
+                self.driver.save_screenshot("search_timeout_error.png")
     
     def start_searching(self):
         """Start searching with today's topics"""
