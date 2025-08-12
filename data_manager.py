@@ -1,17 +1,13 @@
-# data_manager.py
-# At the top of each module
-print(f"Loading {__name__} module") 
 
-import json
-import time
+# data_manager.py
+print(f"Loading {__name__} module")
+
 from datetime import datetime
-import browser_controller 
 
 
 class DataManager:
     def __init__(self):
         self.searched_terms = set()
-        self.start_time = time.time()
         self.search_history = []
         self.rewards = 0
         self.total_searches = 0  # Track all searches, including duplicates

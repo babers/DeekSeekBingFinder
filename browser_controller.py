@@ -1,20 +1,17 @@
 # browser_controller.py
-
-# At the top of each module
-print(f"Loading {__name__} module") 
-
-# browser_controller.py
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import random
 import time
-import threading
-from datetime import datetime
+import threading 
 from daily_topics import DailyTopics
 import re
 import traceback
+
+# At the top of each module
+print(f"Loading {__name__} module") 
 
 class BrowserController:
     def __init__(self, data_manager, gui=None):
@@ -22,21 +19,12 @@ class BrowserController:
         self.gui = gui  # Reference to GUI for updating topic
         self.running = False
         self.driver = None
-             
-        self.topics_provider = DailyTopics()  # <-- NEW TOPICS HANDLER INSTANCE
-        self.last_points = None 
-        import threading
+        self.topics_provider = DailyTopics()
+        self.last_points = None
         self.stop_event = threading.Event()
         
     
-    def _get_current_day_topics(self):
-        """Get today's search topics based on current day of week"""
-        day_name = datetime.now().strftime('%A')
-        return self.daily_topics.get(day_name, [
-            'General technology', 'Science news',
-            'World current affairs', 'Educational content'
-        ])   
-        
+    # Removed unused _get_current_day_topics
     def _setup_driver(self):
         # Update path to your Edge WebDriver
         edge_driver_path = 'msedgedriver.exe'  # Replace with actual path
@@ -50,28 +38,25 @@ class BrowserController:
             if not self.driver:
                 self._setup_driver()
             self.driver.get("https://rewards.bing.com/pointsbreakdown")
-            
+
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
+            from selenium.common.exceptions import TimeoutException
 
-            # wait = WebDriverWait(self.driver, 10)   
-            # points_element = wait.until(
-            #     EC.visibility_of_element_located((By.CSS_SELECTOR, '[class="pointsDetail c-subheading-3 ng-binding"]'))
-            # )
-            
-            #<p ng-bind-html="$ctrl.pointProgressText" class="pointsDetail c-subheading-3 ng-binding"><b>63</b> / 90</p>
-            wait = WebDriverWait(self.driver, 15)  
-            points_element = wait.until(
-               EC.visibility_of_element_located((By.CLASS_NAME, "pointsDetail"))
-)
-            # time.sleep(3)
-            # points_element = self.driver.find_element(
-            #     By.CSS_SELECTOR,
-            #     '[class="pointsDetail c-subheading-3 ng-binding"]'
-            # )
-            
-            
-            
+            wait = WebDriverWait(self.driver, 30)  # Increased to 30 seconds
+            try:
+                points_element = wait.until(
+                    EC.visibility_of_element_located((By.CLASS_NAME, "pointsDetail"))
+                )
+            except TimeoutException:
+                print("Timeout: Could not find points element. The page structure may have changed.")
+                if self.driver:
+                    self.driver.save_screenshot("timeout_error.png")
+                    # Print a portion of the page source for debugging
+                    page_source = self.driver.page_source
+                    print("Page source (first 1000 chars):\n", page_source[:1000])
+                return self.last_points if self.last_points is not None else 0
+
             points_text = points_element.text
             match = re.search(r'\d+', points_text)
             if match:
@@ -92,8 +77,7 @@ class BrowserController:
             return self.last_points if self.last_points is not None else 0
 
             
-    def _generate_search_term(self):
-        return f"{random.choice(self.search_terms)}"
+    # Removed unused _generate_search_term
             
         
     def _perform_search(self, term):
@@ -164,7 +148,7 @@ class BrowserController:
                         self.gui.set_pause_timer(pause_duration)
                     except Exception as e:
                         print(f"Error updating GUI pause timer: {e}")
-                print(f"No points increase after 5 searches. Pausing for 2 minutes...")
+                print("No points increase after 5 searches. Pausing for 2 minutes...")
                 remaining = pause_duration
                 while remaining > 0 and self.running and not self.stop_event.is_set():
                     if self.gui is not None:
@@ -188,7 +172,7 @@ class BrowserController:
                 time.sleep(interval)
                 elapsed += interval
 
-        print(f"*************** Quitting from Search Loop *************")
+        print("*************** Quitting from Search Loop *************")
         self.data_manager.rewards = self.last_points
         self.running = False
         if self.driver:
