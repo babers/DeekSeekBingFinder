@@ -45,8 +45,9 @@ class BrowserController:
             self.driver.get("https://rewards.bing.com/pointsbreakdown")
             wait = WebDriverWait(self.driver, 30)
             try:
+                # Use XPath as provided by the user for more robust element location
                 points_element = wait.until(
-                    EC.visibility_of_element_located((By.CLASS_NAME, "pointsDetail"))
+                    EC.visibility_of_element_located((By.XPATH, '//*[@id="userPointsBreakdown"]/div/div[2]/div/div[1]/div/div[2]/mee-rewards-user-points-details/div/div/div/div/p[2]'))
                 )
             except TimeoutException as e:
                 print("Timeout: Could not find points element. The page structure may have changed.")
@@ -81,18 +82,25 @@ class BrowserController:
     def _perform_search(self, term):
         if not self.driver:
             self._setup_driver()
-        try:
-            self.driver.get('https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1')
-            search_box = self.driver.find_element(By.NAME, 'q')
-            #search_box.clear()
-            search_box.send_keys(term)
-            search_box.send_keys(Keys.RETURN)
-            time.sleep(5)  # Wait for search results to load
-        except Exception as e:
-            # Handle navigation/network timeouts and log the error
-            print(f"Search navigation error: {type(e).__name__}: {e}")
-            if self.driver:
-                self.driver.save_screenshot("search_timeout_error.png")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.driver.get('https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1')
+                search_box = self.driver.find_element(By.NAME, 'q')
+                #search_box.clear()
+                search_box.send_keys(term)
+                search_box.send_keys(Keys.RETURN)
+                time.sleep(5)  # Wait for search results to load
+                return
+            except Exception as e:
+                print(f"Search navigation error (attempt {attempt+1}/{max_retries}): {type(e).__name__}: {e}")
+                if self.driver:
+                    self.driver.save_screenshot(f"search_timeout_error_{attempt+1}.png")
+                # If it's the last attempt, re-raise the exception
+                if attempt == max_retries - 1:
+                    raise
+                else:
+                    time.sleep(2)  # Wait before retrying
     
     def start_searching(self):
         """Start searching with today's topics"""
