@@ -9,12 +9,18 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from threading import Thread
 from tkinter import ttk
+import subprocess
 
 class GUI:
-    def __init__(self, data_manager, browser_controller):
+    def __init__(self, data_manager, browser_controller, *args, **kwargs):
         self.data_manager = data_manager
         self.browser_controller = browser_controller
-        self.root = tk.Tk()
+
+        # ensure there's a root window reference the rest of the GUI uses
+        # (if your GUI uses a different name, keep that and adapt the var below)
+        if not hasattr(self, "root"):
+            self.root = tk.Tk()
+
         self.root.title("Bing Search Automator")
         self.search_started = False
         self.setup_ui()
@@ -72,14 +78,43 @@ class GUI:
         progress_frame = ttk.LabelFrame(main_frame, text="Search Progress")
         progress_frame.pack(expand=True, fill=tk.BOTH, pady=5)
 
-        fig = Figure(figsize=(6, 4), dpi=100)
-        self.ax = fig.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(fig, master=progress_frame)
-        self.canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
+        self.figure = Figure(figsize=(5, 4), dpi=100)
+        self.ax = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.root)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        # Initialize graph with 30 points
+        x_init = list(range(1, 31))
+        y_init = [0] * 30
+        self.ax.plot(x_init, y_init, marker='o', linestyle='-', color='b')
+        self.ax.set_xlabel('Search Number')
+        self.ax.set_ylabel('Rewards Points')
+        self.ax.set_title('Searches vs Rewards Points')
+        self.ax.grid(True)
+        from matplotlib.ticker import MaxNLocator
+        self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        self.canvas.draw()
 
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        # Shutdown-on-complete checkbox (default: disabled)
+        # This creates a BooleanVar the RewardsWatcher will read via is_shutdown_enabled().
+        self.shutdown_var = tk.BooleanVar(value=False)
+        self.shutdown_checkbox = tk.Checkbutton(
+            self.root,
+            text="Shutdown PC when finished",
+            variable=self.shutdown_var
+        )
+        # Place the checkbox — adjust pack/grid options to match your layout
+        try:
+            # If the GUI uses a frame or a specific layout, you might change this
+            self.shutdown_checkbox.pack(anchor="w", padx=8, pady=4)
+        except Exception:
+            # fallback if pack isn't appropriate in your layout
+            pass
 
     def set_pause_timer(self, seconds):
         if hasattr(self, 'pause_timer_label'):
@@ -101,9 +136,16 @@ class GUI:
         self.update_display()
         
     def start_searching(self):
+        if hasattr(self, "data_manager"):
+            self.data_manager.reset()
+        if hasattr(self, "rewards_watcher"):
+            self.rewards_watcher.reset()
         self.search_started = True
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
+        # Reset rewards watcher shutdown flag if present
+        if hasattr(self, "rewards_watcher"):
+            self.rewards_watcher.reset()
         Thread(target=self.browser_controller.start_searching, daemon=True).start()
         
     def stop_searching(self):
@@ -120,31 +162,21 @@ class GUI:
             total_searches_display = counts['total']
         self.total_label.config(text=f"Total Searches: {total_searches_display}")
         self.rewards_label.config(text=f"Rewards Points: {counts['rewards']}")
-        
-        # Update graph: X axis = rewards points, Y axis = searches completed
+
+        # Plot: X axis = rewards points, Y axis = search number
         self.ax.clear()
-        # Use search_history to get actual rewards values
-        data = self.data_manager.search_history
-        if data:
-            rewards = [entry['rewards'] for entry in data]
-            counts = list(range(1, len(rewards) + 1))
-            self.ax.plot(rewards, counts, marker='o', linestyle='-', color='b')
-            self.ax.set_xlabel('Rewards Points')
-            self.ax.set_ylabel('Searches Completed')
-            self.ax.grid(True)
-            # Set X and Y axes to use integer ticks only
-            from matplotlib.ticker import MaxNLocator
-            self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-            self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-            # Set X axis to start at 0 and auto-adjust max
-            min_x = 0
-            max_x = max(rewards) if rewards else 10
-            self.ax.set_xlim(left=min_x, right=max_x + 10)
-            # Set Y axis to start at 0 and auto-adjust max
-            min_y = 0
-            max_y = max(counts) if counts else 10
-            self.ax.set_ylim(bottom=min_y, top=max_y + 10)
-            self.canvas.draw()
+        rewards_points = [item[1] for item in self.data_manager.search_history]
+        search_indices = [item[0] for item in self.data_manager.search_history]
+        if rewards_points and search_indices:
+            self.ax.plot(rewards_points, search_indices, marker='o', linestyle='-', color='b')
+        self.ax.set_xlabel('Rewards Points')
+        self.ax.set_ylabel('Search Number')
+        self.ax.set_title('Rewards Points vs Searches')
+        self.ax.grid(True)
+        from matplotlib.ticker import MaxNLocator
+        self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        self.canvas.draw()
             
     def schedule_update(self):
         self.update_display()
@@ -152,3 +184,23 @@ class GUI:
         
     def start(self):
         self.root.mainloop()
+
+    def is_shutdown_enabled(self) -> bool:
+        """
+        Stable API for external callers (RewardsWatcher).
+        Returns True when the shutdown checkbox is checked.
+        """
+        try:
+            return bool(self.shutdown_var.get())
+        except Exception:
+            return False
+
+    # Compatibility alias
+    get_shutdown_enabled = is_shutdown_enabled
+
+    def shutdown_pc(self):
+        """Shutdown the PC - to be called when the task is complete."""
+        # Confirm with the user before shutting down
+        if tk.messagebox.askokcancel("Confirm Shutdown", "Do you really want to shut down the computer?"):
+            # Execute the shutdown command
+            subprocess.run(["shutdown", "/s", "/t", "60"], check=True)
