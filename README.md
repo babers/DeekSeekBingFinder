@@ -87,9 +87,7 @@ Optional overrides at startup:
    - Paths (WebDriver, database, log file)
    - Search settings (targets, pauses, polling)
    - Logging (level and format)
-- Optional WebDriver overrides in `config.yaml` under `webdriver:`
-   - `version: '139.0.3405.111'`
-   - `url: 'https://msedgedriver.microsoft.com/139.0.3405.111/edgedriver_win64.zip'`
+
 - CLI flags `--driver-url` and `--driver-version` override config and force an install before startup.
 - Edit `daily_topics.py` to change or expand search topics.
 
