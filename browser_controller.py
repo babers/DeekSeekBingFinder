@@ -1,181 +1,164 @@
 # browser_controller.py
 
+import logging
+import random
+import re
+import threading
+import time
 from selenium import webdriver
-from selenium.webdriver.edge.service import Service
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.edge.service import Service
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-import random
-import time
-import threading
-from daily_topics import DailyTopics
-import re
+from selenium.webdriver.support.ui import WebDriverWait
 
-print(f"Loading {__name__} module") 
+from config import Config
+from data_manager import DataManager
+from daily_topics import DailyTopics
 
 class BrowserController:
-    def __init__(self, data_manager, gui=None):
+    def __init__(self, config: Config, data_manager: DataManager, gui=None):
+        self.config = config
         self.data_manager = data_manager
         self.gui = gui
+        self.logger = logging.getLogger(__name__)
+        
         self.running = False
         self.driver = None
         self.topics_provider = DailyTopics()
-        self.last_points = None
+        self.last_points = 0
         self.stop_event = threading.Event()
 
     def _setup_driver(self):
-        edge_driver_path = 'msedgedriver.exe'  # Replace with actual path
-        edge_service = Service(executable_path=edge_driver_path)
-        self.driver = webdriver.Edge(service=edge_service)
+        """Sets up the Edge WebDriver using the path from the config."""
+        try:
+            edge_service = Service(executable_path=self.config.webdriver_path)
+            self.driver = webdriver.Edge(service=edge_service)
+            self.logger.info("WebDriver setup successfully.")
+        except Exception as e:
+            self.logger.error(f"Failed to setup WebDriver: {e}")
+            raise
 
     def get_current_points(self):
+        """Fetches the current rewards points from the rewards page."""
         try:
             if not self.driver:
                 self._setup_driver()
-            self.driver.get("https://rewards.bing.com/pointsbreakdown")
+            
+            self.driver.get(self.config.rewards_url)
             wait = WebDriverWait(self.driver, 30)
-            try:
-                points_element = wait.until(
-                    EC.visibility_of_element_located((By.XPATH, '//*[@id="userPointsBreakdown"]/div/div[2]/div/div[1]/div/div[2]/mee-rewards-user-points-details/div/div/div/div/p[2]'))
-                )
-            except TimeoutException:
-                print("Timeout: Could not find points element. The page structure may have changed.")
-                if self.driver:
-                    self.driver.save_screenshot("timeout_error.png")
-                return self.last_points if self.last_points is not None else 0
+            
+            points_element = wait.until(EC.visibility_of_element_located((By.XPATH, self.config.points_xpath)))
             points_text = points_element.text
             match = re.search(r'\d+', points_text)
+            
             if match:
                 points = int(match.group())
-                print("************  PC Search Points Balance **************** :", points)
+                self.logger.info(f"Current rewards points: {points}")
                 self.last_points = points
                 return points
             else:
-                print("Could not find points in text:", points_text)
-                return self.last_points if self.last_points is not None else 0
+                self.logger.warning(f"Could not parse points from text: '{points_text}'")
+                return self.last_points
         except (TimeoutException, WebDriverException) as e:
-            print(f"Selenium error in get_current_points: {type(e).__name__}: {e}")
+            self.logger.error(f"Selenium error while getting points: {e}")
             if self.driver:
-                self.driver.save_screenshot("selenium_error.png")
-            return self.last_points if self.last_points is not None else 0
+                self.driver.save_screenshot("points_error.png")
+            return self.last_points
         except Exception as e:
-            print(f"Unexpected error in get_current_points: {type(e).__name__}: {e}")
-            return self.last_points if self.last_points is not None else 0
+            self.logger.error(f"An unexpected error occurred while getting points: {e}")
+            return self.last_points
 
-    def _perform_search(self, term):
-        if not self.driver:
-            self._setup_driver()
+    def _perform_search(self, term: str):
+        """Performs a single search on Bing."""
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                self.driver.get('https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1')
-                search_box = self.driver.find_element(By.NAME, 'q')
+                self.driver.get(self.config.search_url)
+                search_box = self.driver.find_element(By.NAME, self.config.search_box_name)
+                search_box.clear()
                 search_box.send_keys(term)
                 search_box.send_keys(Keys.RETURN)
-                time.sleep(5)
+                self.logger.info(f"Performed search for term: '{term}'")
+                time.sleep(self.config.min_sleep_seconds) # Basic wait after search
                 return
             except Exception as e:
-                print(f"Search navigation error (attempt {attempt+1}/{max_retries}): {type(e).__name__}: {e}")
-                if self.driver:
-                    self.driver.save_screenshot(f"search_timeout_error_{attempt+1}.png")
+                self.logger.warning(f"Search attempt {attempt + 1} failed for term '{term}': {e}")
                 if attempt == max_retries - 1:
+                    self.logger.error(f"All retries failed for term '{term}'.")
                     raise
-                else:
-                    time.sleep(2)
+                time.sleep(2)
 
     def start_searching(self):
+        """Starts the search loop in a new thread."""
+        self.logger.info("Starting search process...")
         self.stop_event.clear()
         self.running = True
-        self._setup_driver()
-        initial_points = self.get_current_points()
-        self.data_manager.rewards_points = initial_points
         threading.Thread(target=self._search_loop, daemon=True).start()
 
     def _search_loop(self):
-        today_topics = self.topics_provider.get_topics_for_today()
-        num_topics = len(today_topics)
-        topic_index = 0
-        last_points = self.get_current_points()
-        searches_since_last_increase = 0
-        pause_duration = 2 * 60  # 2 minutes
+        """The main loop for performing searches until the target is met."""
+        try:
+            self._setup_driver()
+            initial_points = self.get_current_points()
+            self.data_manager.rewards_points = initial_points
+            
+            today_topics = self.topics_provider.get_topics_for_today()
+            num_topics = len(today_topics)
+            topic_index = 0
+            searches_since_last_increase = 0
 
-        while self.running and self.get_current_points() < 90:
-            if topic_index >= num_topics:
-                topic_index = 0
-            term = today_topics[topic_index]
-            topic_index += 1
+            while self.running and self.get_current_points() < self.config.target_points:
+                if self.stop_event.is_set():
+                    self.logger.info("Stop event received, exiting search loop.")
+                    break
 
-            if self.gui is not None:
-                try:
+                term = today_topics[topic_index % num_topics]
+                topic_index += 1
+
+                if self.gui:
                     self.gui.set_current_topic(term)
-                except Exception as e:
-                    print(f"Error updating GUI topic: {e}")
 
-            try:
                 self._perform_search(term)
                 current_points = self.get_current_points()
                 self.data_manager.update_rewards(current_points)
                 self.data_manager.add_search(term, current_points)
-            except Exception as e:
-                print(f"Search error: {str(e)}")
 
-            current_points = self.get_current_points()
-            if current_points > last_points:
-                last_points = current_points
-                searches_since_last_increase = 0
-            else:
-                searches_since_last_increase += 1
+                if current_points > self.last_points:
+                    self.last_points = current_points
+                    searches_since_last_increase = 0
+                else:
+                    searches_since_last_increase += 1
 
-            if searches_since_last_increase >= 5:
-                if self.gui is not None:
-                    try:
-                        self.gui.set_pause_timer(pause_duration)
-                    except Exception as e:
-                        print(f"Error updating GUI pause timer: {e}")
-                print("No points increase after 5 searches. Pausing for 2 minutes...")
-                remaining = pause_duration
-                while remaining > 0 and self.running and not self.stop_event.is_set():
-                    if self.gui is not None:
-                        try:
-                            self.gui.update_pause_timer(remaining)
-                        except Exception as e:
-                            print(f"Error updating GUI pause timer: {e}")
-                    time.sleep(1)
-                    remaining -= 1
-                if self.gui is not None:
-                    try:
-                        self.gui.clear_pause_timer()
-                    except Exception as e:
-                        print(f"Error clearing GUI pause timer: {e}")
-                searches_since_last_increase = 0
+                if searches_since_last_increase >= self.config.searches_before_pause:
+                    self.logger.info(f"No points increase after {self.config.searches_before_pause} searches. Pausing...")
+                    if self.gui:
+                        self.gui.set_pause_timer(self.config.pause_duration_minutes * 60)
+                    time.sleep(self.config.pause_duration_minutes * 60)
+                    searches_since_last_increase = 0
 
-            sleep_time = random.uniform(5, 7)
-            interval = 0.5
-            elapsed = 0
-            while elapsed < sleep_time and not self.stop_event.is_set():
-                time.sleep(interval)
-                elapsed += interval
+                sleep_time = random.uniform(self.config.min_sleep_seconds, self.config.max_sleep_seconds)
+                time.sleep(sleep_time)
 
-        print("*************** Quitting from Search Loop *************")
-        self.running = False
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                print(f"Error quitting driver: {str(e)}")
-
-        # Set completion flags in DataManager
-        self.data_manager.mark_loop_complete()
-        if self.get_current_points() >= 90:
-            self.data_manager.mark_rewards_complete()
+        except Exception as e:
+            self.logger.critical(f"A critical error occurred in the search loop: {e}", exc_info=True)
+        finally:
+            self.logger.info("Search loop finished.")
+            self.running = False
+            if self.driver:
+                try:
+                    self.driver.quit()
+                    self.logger.info("WebDriver quit successfully.")
+                except Exception as e:
+                    self.logger.error(f"Error quitting driver: {e}")
+            
+            self.data_manager.mark_loop_complete()
+            if self.get_current_points() >= self.config.target_points:
+                self.data_manager.mark_rewards_complete()
 
     def stop_searching(self):
+        """Stops the search loop gracefully."""
+        self.logger.info("Stop searching requested.")
         self.running = False
         self.stop_event.set()
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                print(f"Error quitting driver: {str(e)}")

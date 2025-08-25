@@ -1,0 +1,32 @@
+urls:
+  rewards: "https://rewards.bing.com/pointsbreakdown"
+  search: "https://www.bing.com/news/?form=ml11z9&crea=ml11z9&wt.mc_id=ml11z9&rnoreward=1&rnoreward=1"
+
+xpaths:
+  points: '//*[@id="userPointsBreakdown"]/div/div[2]/div/div[1]/div/div[2]/mee-rewards-user-points-details/div/div/div/div/p[2]'
+
+selectors:
+  search_box_name: 'q'
+
+paths:
+  webdriver: 'msedgedriver.exe'
+  database: 'searches.db'
+  log_file: 'app.log'
+
+search_settings:
+  target_points: 90
+  searches_before_pause: 5
+  pause_duration_minutes: 2
+  min_sleep_seconds: 5
+  max_sleep_seconds: 7
+  poll_interval: 5
+
+logging:
+  level: 'INFO'
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# Optional: force a specific WebDriver version or direct URL
+# webdriver:
+#   version: '139.0.3405.111'
+#   # Prefer URL if you know it is correct for your platform
+#   url: 'https://msedgedriver.microsoft.com/139.0.3405.111/edgedriver_win64.zip'

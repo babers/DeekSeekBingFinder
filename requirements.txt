@@ -1,3 +1,4 @@
 selenium
 matplotlib
-tkinter 
+lxml
+# tkinter  # built-in with Python on Windows; do not install via pip

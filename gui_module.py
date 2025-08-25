@@ -9,10 +9,14 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from threading import Thread
 from tkinter import ttk
+from tkinter import messagebox
 import subprocess
+from utils.edge_driver_manager import get_local_driver_version
 
 class GUI:
-    def __init__(self, data_manager, browser_controller, *args, **kwargs):
+    def __init__(self, config, data_manager, browser_controller, *args, **kwargs):
+        # Accept config for future use; keep a reference even if not used yet
+        self.config = config
         self.data_manager = data_manager
         self.browser_controller = browser_controller
 
@@ -21,7 +25,18 @@ class GUI:
         if not hasattr(self, "root"):
             self.root = tk.Tk()
 
-        self.root.title("Bing Search Automator")
+        # Determine installed WebDriver version (if available)
+        self.driver_version = None
+        try:
+            self.driver_version = get_local_driver_version(self.config.webdriver_path)
+        except Exception:
+            self.driver_version = None
+
+        base_title = "Bing Search Automator"
+        if self.driver_version:
+            self.root.title(f"{base_title} (WebDriver {self.driver_version})")
+        else:
+            self.root.title(base_title)
         self.search_started = False
         self.setup_ui()
         self.schedule_update()
@@ -40,6 +55,8 @@ class GUI:
 
         self.rewards_label = ttk.Label(stats_frame, text="Rewards Points: 0")
         self.rewards_label.pack(side=tk.LEFT, padx=10, pady=5)
+
+    # WebDriver version is shown in the window title only (no extra label here)
 
         # Control Frame
         control_frame = ttk.LabelFrame(main_frame, text="Controls")
@@ -165,8 +182,10 @@ class GUI:
 
         # Plot: X axis = rewards points, Y axis = search number
         self.ax.clear()
-        rewards_points = [item[1] for item in self.data_manager.search_history]
-        search_indices = [item[0] for item in self.data_manager.search_history]
+        # Use session_search_history from DataManager (list of (index, rewards))
+        session_history = getattr(self.data_manager, 'session_search_history', [])
+        rewards_points = [item[1] for item in session_history]
+        search_indices = [item[0] for item in session_history]
         if rewards_points and search_indices:
             self.ax.plot(rewards_points, search_indices, marker='o', linestyle='-', color='b')
         self.ax.set_xlabel('Rewards Points')
@@ -198,9 +217,4 @@ class GUI:
     # Compatibility alias
     get_shutdown_enabled = is_shutdown_enabled
 
-    def shutdown_pc(self):
-        """Shutdown the PC - to be called when the task is complete."""
-        # Confirm with the user before shutting down
-        if tk.messagebox.askokcancel("Confirm Shutdown", "Do you really want to shut down the computer?"):
-            # Execute the shutdown command
-            subprocess.run(["shutdown", "/s", "/t", "60"], check=True)
+    # Removed legacy shutdown confirmation method to avoid unintended prompts at startup.

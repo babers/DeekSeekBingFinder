@@ -1,111 +1,78 @@
-import threading
-import time
+import logging
 import platform
 import subprocess
+import threading
+import time
 import tkinter as tk
-from tkinter import messagebox
+from enum import Enum
 from typing import Optional
 
+from config import Config
+from data_manager import DataManager
+
+class WatcherState(Enum):
+    IDLE = "idle"
+    MONITORING = "monitoring"
+    SHUTDOWN_PENDING = "shutdown_pending"
+    SHUTDOWN_CANCELLED = "shutdown_cancelled"
+
 class RewardsWatcher:
-    """
-    Background watcher that polls the data_manager for:
-      - rewards completion (various candidate names checked)
-      - loop completion (various candidate names checked)
-
-    When both are detected and the GUI indicates shutdown is enabled, schedules a shutdown.
-    """
-
-    def __init__(self, data_manager, gui: Optional[object] = None, poll_interval: float = 5.0):
+    def __init__(self, config: Config, data_manager: DataManager, gui: Optional[object] = None):
+        self.config = config
         self.data_manager = data_manager
         self.gui = gui
-        self.poll_interval = float(poll_interval)
+        self.logger = logging.getLogger(__name__)
+        
+        self.state = WatcherState.IDLE
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
-        self._shutdown_scheduled = False
+        self.logger.info("RewardsWatcher initialized.")
 
     def start(self):
         if not self._thread.is_alive():
+            self.state = WatcherState.MONITORING
             self._thread.start()
+            self.logger.info("RewardsWatcher started.")
 
     def stop(self, timeout: float = 2.0):
+        self.state = WatcherState.IDLE
         self._stop_event.set()
         if self._thread.is_alive():
             self._thread.join(timeout=timeout)
-
-    def _call_or_get_bool(self, obj, candidates):
-        for name in candidates:
-            if hasattr(obj, name):
-                val = getattr(obj, name)
-                try:
-                    if callable(val):
-                        return bool(val())
-                    return bool(val)
-                except Exception:
-                    continue
-        return False
+        self.logger.info("RewardsWatcher stopped.")
 
     def _gui_shutdown_enabled(self) -> bool:
-        # Prefer the stable GUI API if available
         if not self.gui:
             return False
-
         try:
-            is_shutdown = getattr(self.gui, "is_shutdown_enabled", None)
-            if callable(is_shutdown):
-                return bool(is_shutdown())
-        except Exception:
-            pass
-
-        # Fallback to previous heuristics if GUI does not expose the stable API
-        enabled = self._call_or_get_bool(self.gui, [
-            "shutdown_on_complete", "shutdown_checkbox_enabled",
-            "shutdown_enabled", "get_shutdown_enabled"
-        ])
-        if enabled:
-            return True
-
-        # also try common tkinter variable patterns: gui.shutdown_var.get()
-        if hasattr(self.gui, "shutdown_var"):
-            var = getattr(self.gui, "shutdown_var")
-            try:
-                return bool(var.get())
-            except Exception:
-                try:
-                    return bool(var)
-                except Exception:
-                    pass
-
-        # try attribute directly named 'shutdown' or 'shutdown_checkbox'
-        enabled = self._call_or_get_bool(self.gui, ["shutdown", "shutdown_checkbox"])
-        return enabled
+            return self.gui.is_shutdown_enabled()
+        except Exception as e:
+            self.logger.error(f"Error checking GUI shutdown status: {e}")
+            return False
 
     def _run(self):
         while not self._stop_event.is_set():
-            rewards_complete = getattr(self.data_manager, "rewards_completed", False)
-            loop_complete = getattr(self.data_manager, "loop_completed", False)
-            shutdown_enabled = self._gui_shutdown_enabled()
-            print(f"[Watcher] rewards_complete={rewards_complete}, loop_complete={loop_complete}, shutdown_enabled={shutdown_enabled}, shutdown_scheduled={self._shutdown_scheduled}")
+            if self.state == WatcherState.MONITORING:
+                rewards_complete = self.data_manager.rewards_completed
+                loop_complete = self.data_manager.loop_completed
+                shutdown_enabled = self._gui_shutdown_enabled()
 
-            # If shutdown checkbox is disabled, always allow shutdown to be retried
-            if not shutdown_enabled:
-                if self._shutdown_scheduled:
-                    print("[Watcher] Shutdown checkbox disabled, resetting shutdown_scheduled to False.")
-                self._shutdown_scheduled = False
+                self.logger.debug(
+                    f"State: {self.state}, Rewards: {rewards_complete}, "
+                    f"Loop: {loop_complete}, Shutdown Enabled: {shutdown_enabled}"
+                )
 
-            if rewards_complete and loop_complete and shutdown_enabled and not self._shutdown_scheduled:
-                self._schedule_shutdown()
+                if rewards_complete and loop_complete and shutdown_enabled:
+                    self._transition_to_shutdown_pending()
+            
+            time.sleep(self.config.poll_interval)
 
-            time.sleep(self.poll_interval)
-
-    def _schedule_shutdown(self):
-        print("DEBUG: Entered _schedule_shutdown()")
-        self._shutdown_scheduled = True
-        print("RewardsWatcher: scheduling system shutdown (60s delay).")
-        # Start the cancellation dialog in the GUI thread
+    def _transition_to_shutdown_pending(self):
+        self.logger.info("Conditions met, transitioning to SHUTDOWN_PENDING.")
+        self.state = WatcherState.SHUTDOWN_PENDING
         if hasattr(self.gui, "root"):
             self.gui.root.after(0, self._show_shutdown_dialog)
         else:
-            # Fallback: run shutdown immediately if no GUI root
             self._execute_shutdown()
 
     def _show_shutdown_dialog(self):
@@ -115,107 +82,55 @@ class RewardsWatcher:
         dialog.configure(bg="#f5f5f5")
         dialog.resizable(False, False)
         dialog.grab_set()
-        dialog.protocol("WM_DELETE_WINDOW", lambda: None)  # Disable close button
+        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
 
-        # Header
         header = tk.Label(dialog, text="⚠️ Scheduled Shutdown", font=("Segoe UI", 16, "bold"), fg="#d9534f", bg="#f5f5f5")
         header.pack(pady=(18, 6))
 
-        # Message
-        msg = tk.Label(
-            dialog,
-            text="Your system will automatically shutdown in 60 seconds.\nClick the button below to cancel.",
-            font=("Segoe UI", 12),
-            fg="#333",
-            bg="#f5f5f5",
-            justify="center"
-        )
+        msg = tk.Label(dialog, text="Your system will automatically shutdown in 60 seconds.\nClick the button below to cancel.", font=("Segoe UI", 12), fg="#333", bg="#f5f5f5", justify="center")
         msg.pack(pady=(0, 10))
 
-        # Countdown
         countdown_var = tk.StringVar(value="60")
         countdown_frame = tk.Frame(dialog, bg="#f5f5f5")
         countdown_frame.pack(pady=(0, 10))
-        countdown_label = tk.Label(
-            countdown_frame,
-            text="Time remaining:",
-            font=("Segoe UI", 11),
-            fg="#555",
-            bg="#f5f5f5"
-        )
-        countdown_label.pack(side="left")
-        countdown_time = tk.Label(
-            countdown_frame,
-            textvariable=countdown_var,
-            font=("Segoe UI", 14, "bold"),
-            fg="#d9534f",
-            bg="#f5f5f5",
-            width=4
-        )
-        countdown_time.pack(side="left", padx=(8, 0))
-
-        # Cancel button
-        cancel_flag = {"cancelled": False}
+        
+        tk.Label(countdown_frame, text="Time remaining:", font=("Segoe UI", 11), fg="#555", bg="#f5f5f5").pack(side="left")
+        tk.Label(countdown_frame, textvariable=countdown_var, font=("Segoe UI", 14, "bold"), fg="#d9534f", bg="#f5f5f5", width=4).pack(side="left", padx=(8, 0))
 
         def cancel_shutdown():
-            cancel_flag["cancelled"] = True
+            self.logger.info("Shutdown cancelled by user.")
+            self.state = WatcherState.SHUTDOWN_CANCELLED
             dialog.destroy()
-            print("Shutdown cancelled by user.")
 
-        cancel_btn = tk.Button(
-            dialog,
-            text="Cancel Shutdown",
-            command=cancel_shutdown,
-            font=("Segoe UI", 12, "bold"),
-            bg="#5bc0de",
-            fg="white",
-            activebackground="#31b0d5",
-            activeforeground="white",
-            relief="raised",
-            bd=2,
-            cursor="hand2",
-            width=20
-        )
+        cancel_btn = tk.Button(dialog, text="Cancel Shutdown", command=cancel_shutdown, font=("Segoe UI", 12, "bold"), bg="#5bc0de", fg="white", activebackground="#31b0d5", activeforeground="white", relief="raised", bd=2, cursor="hand2", width=20)
         cancel_btn.pack(pady=(18, 24))
 
-        # Add a subtle border
-        dialog.update_idletasks()
-        dialog.after(100, lambda: dialog.configure(highlightbackground="#d9d9d9", highlightthickness=1))
-
         def countdown(secs):
-            if cancel_flag["cancelled"]:
+            if self.state != WatcherState.SHUTDOWN_PENDING:
                 return
             countdown_var.set(str(secs))
             if secs > 0:
                 dialog.after(1000, countdown, secs - 1)
             else:
                 dialog.destroy()
-                if not cancel_flag["cancelled"]:
+                if self.state == WatcherState.SHUTDOWN_PENDING:
                     self._execute_shutdown()
 
         countdown(60)
 
     def _execute_shutdown(self):
+        self.logger.info("Executing system shutdown.")
         system = platform.system().lower()
-        print(f"DEBUG: platform.system().lower() returned '{system}'")
         try:
             if system.startswith("win"):
-                print("RewardsWatcher: Running Windows shutdown command...")
-                result = subprocess.run(["shutdown", "/s", "/t", "0"], capture_output=True, text=True)
-                print(f"Shutdown command result: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
+                subprocess.run(["shutdown", "/s", "/t", "0"], check=True)
             elif system.startswith("linux") or system.startswith("darwin"):
-                print("RewardsWatcher: Running Unix shutdown command...")
-                try:
-                    result = subprocess.run(["shutdown", "-h", "now"], capture_output=True, text=True)
-                    print(f"Shutdown command result: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
-                except Exception:
-                    result = subprocess.run(["sudo", "shutdown", "-h", "now"], capture_output=True, text=True)
-                    print(f"Shutdown command result: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
+                subprocess.run(["sudo", "shutdown", "-h", "now"], check=True)
             else:
-                print("RewardsWatcher: unknown platform, cannot schedule shutdown automatically.")
-        except Exception as exc:
-            print("RewardsWatcher: failed to schedule shutdown:", exc)
+                self.logger.warning(f"Unsupported platform for shutdown: {system}")
+        except Exception as e:
+            self.logger.error(f"Failed to execute shutdown: {e}")
 
     def reset(self):
-        """Reset shutdown state so watcher can trigger again after a new search."""
-        self._shutdown_scheduled = False
+        self.logger.info("Resetting watcher state to MONITORING.")
+        self.state = WatcherState.MONITORING
