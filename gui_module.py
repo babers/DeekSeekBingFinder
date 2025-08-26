@@ -37,9 +37,13 @@ class GUI:
             self.root.title(f"{base_title} (WebDriver {self.driver_version})")
         else:
             self.root.title(base_title)
+
         self.search_started = False
         self.setup_ui()
         self.schedule_update()
+        # Pause timer state
+        self._pause_after_id = None
+        self._remaining_pause_seconds = 0
         
     def setup_ui(self):
         # Main container
@@ -134,18 +138,59 @@ class GUI:
             pass
 
     def set_pause_timer(self, seconds):
-        if hasattr(self, 'pause_timer_label'):
-            mins, secs = divmod(seconds, 60)
-            self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+        """Start or reset the GUI pause countdown safely from any thread."""
+        def _start():
+            # cancel any existing countdown
+            try:
+                if getattr(self, "_pause_after_id", None):
+                    self.root.after_cancel(self._pause_after_id)
+            except Exception:
+                pass
+            self._pause_after_id = None
+            self._remaining_pause_seconds = int(max(0, seconds))
+            # kick off the first tick immediately
+            self._tick_pause_timer()
+
+        # Schedule on the Tk main loop to stay thread-safe
+        self.root.after(0, _start)
 
     def update_pause_timer(self, seconds):
-        if hasattr(self, 'pause_timer_label'):
-            mins, secs = divmod(seconds, 60)
-            self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+        """Back-compat: update label once; prefer set_pause_timer for auto ticking."""
+        def _update():
+            if hasattr(self, 'pause_timer_label'):
+                mins, secs = divmod(int(max(0, seconds)), 60)
+                self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+        self.root.after(0, _update)
 
     def clear_pause_timer(self):
+        """Clear the pause countdown and label, safely from any thread."""
+        def _clear():
+            try:
+                if getattr(self, "_pause_after_id", None):
+                    self.root.after_cancel(self._pause_after_id)
+            except Exception:
+                pass
+            self._pause_after_id = None
+            self._remaining_pause_seconds = 0
+            if hasattr(self, 'pause_timer_label'):
+                self.pause_timer_label.config(text="")
+        self.root.after(0, _clear)
+
+    def _tick_pause_timer(self):
+        """Internal: decrement and render countdown; reschedule next tick."""
+        # If cleared or finished, stop ticking
+        if self._remaining_pause_seconds <= 0:
+            if hasattr(self, 'pause_timer_label'):
+                self.pause_timer_label.config(text="")
+            self._pause_after_id = None
+            return
+        # Update label
+        mins, secs = divmod(int(self._remaining_pause_seconds), 60)
         if hasattr(self, 'pause_timer_label'):
-            self.pause_timer_label.config(text="")
+            self.pause_timer_label.config(text=f"Paused: {mins:02d}:{secs:02d} remaining")
+        # Decrement and schedule next tick
+        self._remaining_pause_seconds -= 1
+        self._pause_after_id = self.root.after(1000, self._tick_pause_timer)
     def set_current_topic(self, topic):
         if hasattr(self, 'topic_label'):
             self.topic_label.config(text=f"Topic: {topic}")

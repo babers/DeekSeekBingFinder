@@ -16,7 +16,7 @@ paths:
 search_settings:
   target_points: 90
   searches_before_pause: 5
-  pause_duration_minutes: 2
+  pause_duration_minutes: 3
   min_sleep_seconds: 5
   max_sleep_seconds: 7
   poll_interval: 5
