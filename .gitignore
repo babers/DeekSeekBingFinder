@@ -6,3 +6,5 @@ debug.png
 .env
 .DS_Store
 *.log
+points_error.png
+searches.db
