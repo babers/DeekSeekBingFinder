@@ -26,6 +26,7 @@
 - Shutdown checkbox added to the GUI for user control.
 - Graph now plots rewards points on the X-axis and searches on the Y-axis.
 - Improved shutdown dialog appearance and button visibility.
+ - Network indicator: a colorized (green/red) network status indicator was added to the stats panel and is refreshed every second.
 
 ### DataManager Enhancements
 - Tracks search history and rewards points for plotting and logic (with SQLite persistence).
@@ -37,11 +38,24 @@
 - Exposes `--driver-url` and `--driver-version` overrides via CLI; also supports optional `webdriver:` overrides in `config.yaml`.
 - Logs XPath counts, extracted href, combined version text (truncated), and parsed version for debugging.
 
+### `utils/network.py`
+- Provides `is_connected()` and a `wait_for_connection()` helper used at startup and by the `BrowserController`.
+
+### `browser_controller.py` (behavior changes)
+- Pause logic: fixed so the pause timer is only triggered when rewards points remain unchanged for the configured number of consecutive searches (`searches_before_pause` in `config.yaml`).
+- `get_current_points()` no longer mutates internal comparison state; it returns the raw parsed points and the search loop handles comparisons. This prevents accidental resets of the pause counter.
+- Network resilience: the controller will wait for connectivity before performing searches or fetching points, preserving GUI/backend state during outages.
+
 ## Business Logic Summary
 - Automated Bing searches maximize rewards points.
 - All progress and stats are tracked and visualized in real time.
 - Shutdown prompt was removed from startup; shutdown is only triggered when all conditions are met and can be cancelled by the user.
 - The workflow is modular, robust, and user-friendly.
+
+## Recent Changes and Notes
+- The app now waits for network connectivity at startup and will retry until connected.
+- During network outages the app pauses network-dependent operations (searches, point lookups) without resetting session state or counters.
+- The pause-on-no-increase logic now uses consecutive unchanged reads (configurable via `config.yaml`).
 
 ---
 

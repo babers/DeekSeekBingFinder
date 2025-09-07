@@ -9,6 +9,7 @@ from utils.edge_driver_manager import (
     ensure_msedgedriver_from_url,
     ensure_msedgedriver_version,
 )
+from utils.network import is_connected, wait_for_connection
 from gui_module import GUI
 from browser_controller import BrowserController
 from data_manager import DataManager
@@ -89,6 +90,11 @@ def main():
 
     # Create and run the application
     app = Application(config)
+    # Ensure we have internet before starting the main GUI and search loop
+    if not is_connected():
+        logging.getLogger(__name__).warning("No internet detected at startup. Waiting for connectivity...")
+        wait_for_connection(logger=logging.getLogger(__name__))
+
     app.run()
 
 if __name__ == "__main__":

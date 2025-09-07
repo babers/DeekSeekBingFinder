@@ -16,6 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from config import Config
 from data_manager import DataManager
 from daily_topics import DailyTopics
+from utils.network import is_connected
 
 class BrowserController:
     def __init__(self, config: Config, data_manager: DataManager, gui=None):
@@ -40,9 +41,26 @@ class BrowserController:
             self.logger.error(f"Failed to setup WebDriver: {e}")
             raise
 
+    def _wait_for_connection(self, retry_seconds: int = 5) -> bool:
+        """Block until internet is available or stop_event is set. Returns True when connected, False if stopped."""
+        while not self.stop_event.is_set():
+            if is_connected():
+                self.logger.info("Network connectivity available.")
+                return True
+            self.logger.warning(f"No internet connectivity detected. Retrying in {retry_seconds} seconds...")
+            time.sleep(retry_seconds)
+        # stop_event set -> abort wait
+        self.logger.info("Stop requested while waiting for network; aborting wait.")
+        return False
+
     def get_current_points(self):
         """Fetches the current rewards points from the rewards page."""
         try:
+            # If network is down, wait here (preserve state) until it returns or stop requested
+            if not is_connected():
+                self.logger.warning("No internet connection detected before fetching points. Waiting...")
+                if not self._wait_for_connection():
+                    return self.last_points
             if not self.driver:
                 self._setup_driver()
             
@@ -56,7 +74,8 @@ class BrowserController:
             if match:
                 points = int(match.group())
                 self.logger.info(f"Current rewards points: {points}")
-                self.last_points = points
+                # Do not modify self.last_points here; leave that to the caller so
+                # the search loop can compare previous vs current values correctly.
                 return points
             else:
                 self.logger.warning(f"Could not parse points from text: '{points_text}'")
@@ -75,6 +94,11 @@ class BrowserController:
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                # Ensure network present before attempting search
+                if not is_connected():
+                    self.logger.warning("No internet connection detected before performing search. Waiting...")
+                    if not self._wait_for_connection():
+                        return
                 self.driver.get(self.config.search_url)
                 search_box = self.driver.find_element(By.NAME, self.config.search_box_name)
                 search_box.clear()
@@ -103,11 +127,12 @@ class BrowserController:
             self._setup_driver()
             initial_points = self.get_current_points()
             self.data_manager.rewards_points = initial_points
-            
+            self.last_points = initial_points  # Ensure last_points is set to actual starting points
+
             today_topics = self.topics_provider.get_topics_for_today()
             num_topics = len(today_topics)
             topic_index = 0
-            searches_since_last_increase = 0
+            unchanged_points_counter = 0
 
             while self.running and self.get_current_points() < self.config.target_points:
                 if self.stop_event.is_set():
@@ -127,16 +152,19 @@ class BrowserController:
 
                 if current_points > self.last_points:
                     self.last_points = current_points
-                    searches_since_last_increase = 0
+                    unchanged_points_counter = 0
+                elif current_points == self.last_points:
+                    unchanged_points_counter += 1
+                    if unchanged_points_counter >= self.config.searches_before_pause:
+                        self.logger.info(f"Rewards points unchanged for {self.config.searches_before_pause} consecutive searches. Pausing...")
+                        if self.gui:
+                            self.gui.set_pause_timer(self.config.pause_duration_minutes * 60)
+                        time.sleep(self.config.pause_duration_minutes * 60)
+                        unchanged_points_counter = 0
                 else:
-                    searches_since_last_increase += 1
-
-                if searches_since_last_increase >= self.config.searches_before_pause:
-                    self.logger.info(f"No points increase after {self.config.searches_before_pause} searches. Pausing...")
-                    if self.gui:
-                        self.gui.set_pause_timer(self.config.pause_duration_minutes * 60)
-                    time.sleep(self.config.pause_duration_minutes * 60)
-                    searches_since_last_increase = 0
+                    # Points decreased (should not happen), treat as reset for robustness
+                    self.last_points = current_points
+                    unchanged_points_counter = 0
 
                 sleep_time = random.uniform(self.config.min_sleep_seconds, self.config.max_sleep_seconds)
                 time.sleep(sleep_time)

@@ -12,6 +12,7 @@ from tkinter import ttk
 from tkinter import messagebox
 import subprocess
 from utils.edge_driver_manager import get_local_driver_version
+from utils.network import is_connected
 
 class GUI:
     def __init__(self, config, data_manager, browser_controller, *args, **kwargs):
@@ -94,6 +95,21 @@ class GUI:
         pause_frame.pack(fill=tk.X, pady=5)
         self.pause_timer_label = ttk.Label(pause_frame, text="")
         self.pause_timer_label.pack(side=tk.LEFT, padx=10, pady=5)
+
+        # Network status indicator
+        try:
+            # Create a small text-based colored dot (Unicode) and a text label
+            self.network_status_frame = tk.Frame(stats_frame, bg=stats_frame.cget('background'))
+            # Use a tk.Label for the colored dot so fg/bg reliably change across themes
+            self.network_status_dot = tk.Label(self.network_status_frame, text="\u25CF", fg="#808080", bg=stats_frame.cget('background'), font=("Segoe UI", 10))
+            self.network_status_dot.pack(side=tk.LEFT)
+            self.network_status_label = ttk.Label(self.network_status_frame, text="Network: Unknown")
+            self.network_status_label.pack(side=tk.LEFT, padx=(6, 0))
+            self.network_status_frame.pack(side=tk.RIGHT, padx=10, pady=5)
+        except Exception:
+            # fallback - use a simple tk.Label if ttk fails for any reason
+            self.network_status_label = tk.Label(stats_frame, text="Network: Unknown")
+            self.network_status_label.pack(side=tk.RIGHT, padx=10, pady=5)
 
         # Progress Frame
         progress_frame = ttk.LabelFrame(main_frame, text="Search Progress")
@@ -241,9 +257,36 @@ class GUI:
         self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         self.canvas.draw()
+
+    def update_network_status(self):
+        """Check connectivity and update the network status label."""
+        try:
+            online = is_connected()
+        except Exception:
+            online = False
+
+        text = "Network: Online" if online else "Network: Offline"
+        # Schedule UI update on main loop
+        def _update():
+            try:
+                if hasattr(self, 'network_status_label'):
+                    self.network_status_label.config(text=text)
+                # update colored dot if label available
+                if hasattr(self, 'network_status_dot'):
+                    color = "#2ecc71" if online else "#e74c3c"
+                    try:
+                        self.network_status_dot.config(fg=color)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        self.root.after(0, _update)
             
     def schedule_update(self):
         self.update_display()
+        # update network status at the same cadence
+        self.update_network_status()
         self.root.after(1000, self.schedule_update)
         
     def start(self):
