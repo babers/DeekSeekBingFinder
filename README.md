@@ -1,6 +1,6 @@
 # DeekSeekBingFinder
 
-Automate Bing searches to maximize Microsoft Rewards points using Selenium and a Tkinter GUI. Includes automatic shutdown logic, an auto-updated Edge WebDriver, network-resilient search automation, and a professional user interface.
+Automate Bing searches to maximize Microsoft Rewards points using Selenium and a Tkinter GUI. Includes automatic shutdown logic, an auto-updated Edge WebDriver, and a professional user interface.
 
 ## Features
 
@@ -8,15 +8,11 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 - Tracks and displays current rewards points and search count
 - Real-time GUI with progress graph (Rewards Points vs Searches)
 - Edge WebDriver auto-update at startup by parsing the official Microsoft developer portal
-   - Uses robust XPath parsing (with lxml) and logs detailed parse results (counts, href, parsed version)
-   - Falls back to a regex-based portal parse if XPath isn’t available
+  - Uses robust XPath parsing (with lxml) and logs detailed parse results (counts, href, parsed version)
+  - Falls back to a regex-based portal parse if XPath isn’t available
 - GUI improvements
-   - Window title shows the installed WebDriver version (e.g., “WebDriver 139.0.3405.111”)
-   - “Shutdown PC when finished” checkbox controls post-completion shutdown
-- Network resilience and GUI indicator
-   - The app now verifies internet connectivity before starting the main loop and will wait for connection if none is present at startup.
-   - During the search process the BrowserController will pause network-dependent actions and keep all GUI/backend state intact until connectivity is restored.
-   - A small colorized network indicator (green/red) is visible in the GUI showing online/offline state.
+  - Window title shows the installed WebDriver version (e.g., “WebDriver 139.0.3405.111”)
+  - “Shutdown PC when finished” checkbox controls post-completion shutdown
 - Shutdown automation with a 60-second, cancelable dialog (only after targets are met)
 - Config-driven, well-logged, and modular
 
@@ -25,7 +21,7 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 - Python 3.8+
 - Microsoft Edge browser
 - Required Python packages (see requirements.txt)
-   - selenium, matplotlib, lxml (tkinter is built-in on Windows)
+  - selenium, matplotlib, lxml (tkinter is built-in on Windows)
 
 ## Installation
 
@@ -46,7 +42,6 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 
 ## Usage
 
-
 Run the main script:
 
 ```sh
@@ -59,15 +54,13 @@ python main.py
 - Click "Stop" to halt the process.
 - Enable the "Shutdown PC when finished" checkbox to allow automatic shutdown when all rewards and searches are complete.
 - When shutdown is triggered, a dialog box appears with a 60-second countdown and a Cancel button. If not cancelled, the PC will shut down automatically.
- - The app will check for internet connectivity at startup; if none is found it will wait and log retries until connectivity is restored.
- - During the run, network interruptions will pause network operations (searches / points fetch) but will not reset or lose GUI/session state.
 
 Optional overrides at startup:
 
 - Force a specific WebDriver URL:
-   - `--driver-url https://msedgedriver.microsoft.com/<ver>/edgedriver_win64.zip`
+  - `--driver-url https://msedgedriver.microsoft.com/<ver>/edgedriver_win64.zip`
 - Force a specific WebDriver version:
-   - `--driver-version 139.0.3405.111`
+  - `--driver-version 139.0.3405.111`
 
 ## Project Structure
 
@@ -84,36 +77,31 @@ Optional overrides at startup:
 - `requirements.txt` — Python dependencies
 - `msedgedriver.exe` — Edge WebDriver binary (auto-managed)
 
-
 ## Configuration & Customization
 
 - Edit `config.yaml` to change:
-   - URLs/selectors
-   - Paths (WebDriver, database, log file)
-   - Search settings (targets, pauses, polling)
-   - Logging (level and format)
+  - URLs/selectors
+  - Paths (WebDriver, database, log file)
+  - Search settings (targets, pauses, polling)
+  - Logging (level and format)
 
 - CLI flags `--driver-url` and `--driver-version` override config and force an install before startup.
 - Edit `daily_topics.py` to change or expand search topics.
 
-
 ## Troubleshooting
 
 - Logs are written to `app.log`. Look for lines like:
-   - `Using XPaths -> link: '...', version: '...'`
-   - `XPath link nodes count: N`, `XPath version nodes count: M`
-   - `XPath parse results -> version: X.Y.Z.W, url: https://.../edgedriver_win64.zip`
+  - `Using XPaths -> link: '...', version: '...'`
+  - `XPath link nodes count: N`, `XPath version nodes count: M`
+  - `XPath parse results -> version: X.Y.Z.W, url: https://.../edgedriver_win64.zip`
 - If lxml isn’t installed, the app logs it and falls back to regex-based parsing.
 - For Selenium errors, ensure Edge is installed and up to date; the driver should auto-match via portal download.
 - If shutdown does not trigger, confirm both rewards and loop are complete and the checkbox is enabled. The startup prompt was removed; shutdown only appears on completion.
- - If the app reports network offline, check your network connection. The app will retry automatically and resume when connectivity returns.
- - If the pause timer fires unexpectedly, confirm `searches_before_pause` in `config.yaml` (the pause counter is now read from config and the logic triggers only when points remain unchanged for that many consecutive searches).
- - If the rewards points display is incorrect, check `app.log` for the XPath parse lines and for any Selenium timeouts; `get_current_points()` no longer mutates internal counters (the search loop manages comparisons) so the logs will show the raw parsed value.
-
 
 ## Workflow & Module Summary
 
 ### Workflow Overview
+
 1. Startup: Run `main.py` to launch the Tkinter GUI and initialize all modules. Before the GUI, the app ensures the correct Edge WebDriver is installed by parsing the Microsoft portal.
 2. User Action: Click "Start Searching" in the GUI to begin automated Bing searches.
 3. Search Automation: `BrowserController` uses Selenium to perform Bing searches with daily/random topics.
@@ -123,24 +111,18 @@ Optional overrides at startup:
 7. User Control: The user can stop the search process or cancel the shutdown sequence at any time.
 
 ### Newly Added/Updated Modules
+
 - `rewards_watcher.py`: Monitors completion of rewards and search loop, triggers shutdown sequence, presents styled dialog box, allows shutdown to be retried if the checkbox is toggled.
 - GUI Enhancements: Title shows WebDriver version; shutdown checkbox; improved shutdown dialog; graph plots rewards points vs searches.
 - DataManager Enhancements: Tracks search history and rewards points, provides completion flags and reset methods; persists to SQLite.
 - Edge WebDriver Manager: Auto-resolves and downloads correct `msedgedriver.exe` by parsing the official portal (XPath + regex fallback), logs the exact URL/version used.
- - `utils/network.py`: New helper for quick connectivity checks and a wait loop used at startup and in the BrowserController.
- - `browser_controller.py`: Fixed pause logic so the pause timer only triggers when rewards points remain unchanged for N consecutive searches (configured via `searches_before_pause` in `config.yaml`). Removed unintended side-effects from `get_current_points()` so comparisons are reliable.
- - `gui_module.py`: Added a colorized network indicator (green/red) and a periodic network check that updates the GUI every second.
 
 ### Business Logic Summary
+
 - Automated Bing searches maximize rewards points.
 - All progress and stats are tracked and visualized in real time.
 - Shutdown is only triggered when all conditions are met and can be cancelled by the user.
 - The workflow is modular, robust, and user-friendly.
-
-### Recent Bugfixes & Behavior Changes
-- Pause logic: previously the app paused every N searches regardless of points — now the pause occurs only when points remain unchanged for the configured consecutive searches.
-- Point fetching: `get_current_points()` was modified to return raw parsed values and no longer updates internal comparison state; this prevents accidental resets of the pause counter.
-- Network resilience: the app waits for network at startup and pauses network operations during outages without losing GUI/session state.
 
 ## License
 

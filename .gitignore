@@ -8,3 +8,4 @@ debug.png
 *.log
 points_error.png
 searches.db
+*.db
