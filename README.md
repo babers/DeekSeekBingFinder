@@ -22,6 +22,7 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 - GUI improvements
   - Window title shows the installed WebDriver version (e.g., “WebDriver 139.0.3405.111”)
   - “Shutdown PC when finished” checkbox controls post-completion shutdown
+  - Elapsed session timer: a small elapsed-time display was added to the "Current Status" panel. The timer starts when the user clicks "Start Searching", stops and is logged when the rewards target is reached or when the user stops the session, and preserves the final elapsed time until a new session is started.
 - Shutdown automation with a 60-second, cancelable dialog (only after targets are met)
 - Config-driven, well-logged, and modular
 

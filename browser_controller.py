@@ -17,6 +17,7 @@ from config import Config
 from data_manager import DataManager
 from daily_topics import DailyTopics
 from utils.network import is_connected
+from utils import elapsed_timer
 
 class BrowserController:
     def __init__(self, config: Config, data_manager: DataManager, gui=None):
@@ -172,6 +173,14 @@ class BrowserController:
         except Exception as e:
             self.logger.critical(f"A critical error occurred in the search loop: {e}", exc_info=True)
         finally:
+            # If we've reached the rewards target, log elapsed time
+            try:
+                current = self.get_current_points()
+                if current >= self.config.target_points:
+                    elapsed = elapsed_timer.stop()
+                    self.logger.info(f"Target reached (points={current}). Elapsed time: {elapsed:.1f} seconds")
+            except Exception:
+                pass
             self.logger.info("Search loop finished.")
             self.running = False
             if self.driver:

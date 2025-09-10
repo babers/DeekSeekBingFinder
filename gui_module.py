@@ -13,6 +13,8 @@ from tkinter import messagebox
 import subprocess
 from utils.edge_driver_manager import get_local_driver_version
 from utils.network import is_connected
+from utils import elapsed_timer
+import logging
 
 class GUI:
     def __init__(self, config, data_manager, browser_controller, *args, **kwargs):
@@ -60,6 +62,14 @@ class GUI:
 
         self.rewards_label = ttk.Label(stats_frame, text="Rewards Points: 0")
         self.rewards_label.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        # Elapsed time label (updated from utils.elapsed_timer)
+        try:
+            self.elapsed_label = ttk.Label(stats_frame, text="Elapsed: 00:00:00")
+            self.elapsed_label.pack(side=tk.LEFT, padx=10, pady=5)
+        except Exception:
+            self.elapsed_label = tk.Label(stats_frame, text="Elapsed: 00:00:00")
+            self.elapsed_label.pack(side=tk.LEFT, padx=10, pady=5)
 
     # WebDriver version is shown in the window title only (no extra label here)
 
@@ -221,6 +231,13 @@ class GUI:
         self.search_started = True
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
+        # start elapsed timer for the search session
+        try:
+            elapsed_timer.reset()
+            elapsed_timer.start()
+            logging.getLogger(__name__).info("Elapsed timer started for search session.")
+        except Exception:
+            pass
         # Reset rewards watcher shutdown flag if present
         if hasattr(self, "rewards_watcher"):
             self.rewards_watcher.reset()
@@ -230,6 +247,13 @@ class GUI:
         self.browser_controller.stop_searching()
         self.start_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
+        # stop elapsed timer and log elapsed time
+        try:
+            elapsed = elapsed_timer.stop()
+            logging.getLogger(__name__).info(f"Search session stopped by user after {elapsed:.1f} seconds")
+            elapsed_timer.reset()
+        except Exception:
+            pass
         
     def update_display(self):
         counts = self.data_manager.get_current_counts()
@@ -240,6 +264,16 @@ class GUI:
             total_searches_display = counts['total']
         self.total_label.config(text=f"Total Searches: {total_searches_display}")
         self.rewards_label.config(text=f"Rewards Points: {counts['rewards']}")
+
+        # Update elapsed timer label
+        try:
+            elapsed = elapsed_timer.get_elapsed()
+            hrs, rem = divmod(int(elapsed), 3600)
+            mins, secs = divmod(rem, 60)
+            if hasattr(self, 'elapsed_label'):
+                self.elapsed_label.config(text=f"Elapsed: {hrs:02d}:{mins:02d}:{secs:02d}")
+        except Exception:
+            pass
 
         # Plot: X axis = rewards points, Y axis = search number
         self.ax.clear()
