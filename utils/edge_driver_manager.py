@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 import urllib.request
 import zipfile
+import time
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -31,6 +32,11 @@ except Exception:  # lxml is optional; regex fallback will be used if missing
 DEVPORTAL_URL = (
     "https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver?form=MA13LH"
 )
+
+# Retry/backoff defaults
+DEFAULT_RETRIES = 3
+BACKOFF_FACTOR = 2  # exponential factor
+INITIAL_BACKOFF = 1  # in seconds
 
 
 def _parse_version(text: str) -> Optional[str]:
@@ -117,35 +123,41 @@ def _fetch_latest_from_devportal_by_xpath(logger: Optional[logging.Logger] = Non
         "/html/body/div[1]/div/main/div/div[1]/section[3]/div[2]/div/div/div/div[2]/div/"
         "div/div/div/div[1]/div/div/div/div[1]/div/div[2]/text()"
     )
-    try:
-        with urllib.request.urlopen(DEVPORTAL_URL, timeout=20) as resp:
-            if resp.status != 200:
-                raise RuntimeError(f"HTTP {resp.status}")
-            html_text = resp.read().decode("utf-8", errors="ignore")
-        log.debug(f"Using XPaths -> link: '{link_xpath}', version: '{version_xpath}'")
-        tree = lxml_html.fromstring(html_text)
-        link_nodes = tree.xpath(link_xpath)
-        log.debug(f"XPath link nodes count: {len(link_nodes)}")
-        href = link_nodes[0].get("href") if link_nodes else None
-        if href:
-            href = urljoin(DEVPORTAL_URL, href)
-        log.debug(f"XPath href extracted: {href}")
-        # version text nodes may include extra words; extract dotted version
-        version_nodes = tree.xpath(version_xpath)
-        log.debug(f"XPath version nodes count: {len(version_nodes)}")
-        combined = " ".join(v.strip() for v in version_nodes if isinstance(v, str))
-        preview = (combined[:200] + "...") if len(combined) > 200 else combined
-        log.debug(f"XPath version text combined (truncated): '{preview}'")
-        ver = _parse_version(combined) or _parse_version(href or "")
-        log.info(f"XPath parse results -> version: {ver}, url: {href}")
-        if href and ver:
-            log.info(f"Developer portal (XPath) latest msedgedriver {ver}: {href}")
-            return ver, href
-        log.debug("XPath parse did not yield both version and href")
-        return None
-    except Exception as e:
-        log.warning(f"XPath parsing of developer portal failed: {e}")
-        return None
+    attempt = 0
+    while attempt < DEFAULT_RETRIES:
+        try:
+            with urllib.request.urlopen(DEVPORTAL_URL, timeout=20) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"HTTP {resp.status}")
+                html_text = resp.read().decode("utf-8", errors="ignore")
+            log.debug(f"Using XPaths -> link: '{link_xpath}', version: '{version_xpath}'")
+            tree = lxml_html.fromstring(html_text)
+            link_nodes = tree.xpath(link_xpath)
+            log.debug(f"XPath link nodes count: {len(link_nodes)}")
+            href = link_nodes[0].get("href") if link_nodes else None
+            if href:
+                href = urljoin(DEVPORTAL_URL, href)
+            log.debug(f"XPath href extracted: {href}")
+            # version text nodes may include extra words; extract dotted version
+            version_nodes = tree.xpath(version_xpath)
+            log.debug(f"XPath version nodes count: {len(version_nodes)}")
+            combined = " ".join(v.strip() for v in version_nodes if isinstance(v, str))
+            preview = (combined[:200] + "...") if len(combined) > 200 else combined
+            log.debug(f"XPath version text combined (truncated): '{preview}'")
+            ver = _parse_version(combined) or _parse_version(href or "")
+            log.info(f"XPath parse results -> version: {ver}, url: {href}")
+            if href and ver:
+                log.info(f"Developer portal (XPath) latest msedgedriver {ver}: {href}")
+                return ver, href
+            log.debug("XPath parse did not yield both version and href")
+            return None
+        except Exception as e:
+            attempt += 1
+            log.warning(f"XPath parsing of developer portal failed (attempt {attempt}/{DEFAULT_RETRIES}): {e}")
+            if attempt >= DEFAULT_RETRIES:
+                return None
+            backoff = INITIAL_BACKOFF * (BACKOFF_FACTOR ** (attempt - 1))
+            time.sleep(backoff)
 
 
 def _detect_platform_tag() -> str:
@@ -164,6 +176,27 @@ def _build_download_url(version: str, platform_tag: str, domain: str = "microsof
     return f"{base}/{version}/edgedriver_{platform_tag}.zip"
 
 
+def _url_exists(url: str, timeout: int = 8) -> bool:
+    """Return True if a HEAD request to url returns HTTP 200.
+
+    Uses urllib.request.Request with method='HEAD' when available; falls back to
+    attempting a short GET and checking status.
+    """
+    try:
+        req = urllib.request.Request(url, method='HEAD')
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status == 200
+    except TypeError:
+        # Some older Python builds may not support Request(method=...)
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+
 def get_latest_download_url(platform_tag: Optional[str] = None, logger: Optional[logging.Logger] = None) -> Optional[tuple[str, str]]:
     """Return (version, url) for the latest driver by parsing the developer portal."""
     log = logger or logging.getLogger(__name__)
@@ -172,12 +205,25 @@ def get_latest_download_url(platform_tag: Optional[str] = None, logger: Optional
     except Exception as e:
         log.warning(f"Platform detection failed: {e}")
         return None
-    # First try strict XPath-based extraction
+    # First try strict XPath-based extraction. Accept it only if the returned URL
+    # matches the requested platform (e.g., edgedriver_win64.zip). Otherwise
+    # ignore the XPath result and fall back to the regex extraction which is
+    # filtered by platform_tag.
     via_xpath = _fetch_latest_from_devportal_by_xpath(log)
     if via_xpath:
         ver, url = via_xpath
-        log.info(f"Latest WebDriver URL (XPath): {url}")
-        return ver, url
+        # If the XPath-extracted URL already matches the platform, accept it.
+        if tag and f"edgedriver_{tag}.zip" in (url or ""):
+            log.info(f"Latest WebDriver URL (XPath): {url}")
+            return ver, url
+        # Otherwise, try to construct a platform-specific URL for the same
+        # version (e.g., switch mac64 -> win64) and verify it exists before
+        # accepting it. This handles the portal referencing multiple zips.
+        candidate = _build_download_url(ver, tag, domain="microsoft")
+        if _url_exists(candidate):
+            log.info(f"Using XPath-detected version {ver} but switching to platform URL: {candidate}")
+            return ver, candidate
+        log.info(f"XPath-derived URL does not match platform '{tag}' and candidate {candidate} not reachable: {url} -- using regex fallback")
     # Then try regex fallback filtered by platform tag
     via_regex = _fetch_latest_from_devportal(tag, log)
     if via_regex:
@@ -188,10 +234,20 @@ def get_latest_download_url(platform_tag: Optional[str] = None, logger: Optional
 
 
 def _download(url: str, timeout: int = 60) -> bytes:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"Failed to download: HTTP {resp.status}")
-        return resp.read()
+    # Retry with exponential backoff for transient network failures
+    attempt = 0
+    while attempt < DEFAULT_RETRIES:
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"Failed to download: HTTP {resp.status}")
+                return resp.read()
+        except Exception:
+            attempt += 1
+            if attempt >= DEFAULT_RETRIES:
+                raise
+            backoff = INITIAL_BACKOFF * (BACKOFF_FACTOR ** (attempt - 1))
+            time.sleep(backoff)
 
 
 def _extract_driver(zip_bytes: bytes, dest_dir: str) -> str:
@@ -279,7 +335,7 @@ def ensure_msedgedriver_version(version: str, driver_path: str) -> str:
         return abs_path
 
 
-def ensure_latest_msedgedriver(driver_path: str) -> str:
+def ensure_latest_msedgedriver(driver_path: str) -> tuple[str, Optional[str], Optional[str]]:
     """Ensure the latest Edge WebDriver is present at driver_path.
 
     Returns the absolute path to the driver (existing or newly downloaded).
@@ -308,14 +364,14 @@ def ensure_latest_msedgedriver(driver_path: str) -> str:
 
     if latest and local and _version_tuple(local) >= _version_tuple(latest):
         log.info(f"Local msedgedriver is up to date ({local}). Latest available: {latest} -> {url}")
-        return abs_path
+        return abs_path, local, latest
 
     try:
         if not url:
             got = _fetch_latest_from_devportal(tag, log)
             if not got:
                 log.warning("Could not determine latest msedgedriver version; proceeding with existing driver if available.")
-                return abs_path
+                return abs_path, local, latest
             latest, url = got
             log.info(f"Latest Edge WebDriver URL: {url}")
 
@@ -328,7 +384,7 @@ def ensure_latest_msedgedriver(driver_path: str) -> str:
             log.info(f"Installed msedgedriver {new_ver} at {out_path}")
         else:
             log.info(f"Installed msedgedriver at {out_path}")
-        return out_path
+        return out_path, new_ver, latest
     except Exception as e:
         log.warning(f"Failed to update msedgedriver automatically: {e}")
-        return abs_path
+        return abs_path, local, latest

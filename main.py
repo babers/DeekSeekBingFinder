@@ -82,7 +82,12 @@ def main():
         elif getattr(config, 'webdriver_version', None):
             updated_path = ensure_msedgedriver_version(config.webdriver_version, config.webdriver_path or 'msedgedriver.exe')
         else:
-            updated_path = ensure_latest_msedgedriver(config.webdriver_path or 'msedgedriver.exe')
+            res = ensure_latest_msedgedriver(config.webdriver_path or 'msedgedriver.exe')
+            # Backwards compatible: function may return a string path or a tuple (path, installed_version, latest_available)
+            if isinstance(res, tuple) and len(res) >= 1:
+                updated_path = res[0]
+            else:
+                updated_path = res
         # Update config in-memory so BrowserController uses the latest path
         config.webdriver_path = updated_path
     except Exception as e:

@@ -10,6 +10,15 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 - Edge WebDriver auto-update at startup by parsing the official Microsoft developer portal
   - Uses robust XPath parsing (with lxml) and logs detailed parse results (counts, href, parsed version)
   - Falls back to a regex-based portal parse if XPath isn’t available
+  
+### Recent driver manager fixes (pre-last-commit)
+
+- Retry/backoff: portal fetches and driver ZIP downloads now retry with exponential backoff to handle transient network failures.
+- Platform-verified URLs: XPath-extracted links are only accepted when they match the detected platform (e.g., `edgedriver_win64.zip`). If XPath yields a different-platform link (mac64, etc.), the manager now builds and verifies a platform-specific candidate URL before accepting it.
+- Safer download/install: improved verification prevents downloading mismatched platform ZIPs and reduces false negatives.
+- API change (richer return): `ensure_latest_msedgedriver()` now returns a tuple `(installed_path, installed_version, latest_available)`; `main.py` was updated to handle both the new tuple and the legacy string return for compatibility.
+- Diagnostics added: small helper scripts under `tools/` (`diag_*`) were added to inspect portal parsing and to force-run the installer for debugging.
+
 - GUI improvements
   - Window title shows the installed WebDriver version (e.g., “WebDriver 139.0.3405.111”)
   - “Shutdown PC when finished” checkbox controls post-completion shutdown

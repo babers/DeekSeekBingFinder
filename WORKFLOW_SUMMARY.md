@@ -63,6 +63,14 @@
 - The app now waits for network connectivity at startup and will retry until connected.
 - During network outages the app pauses network-dependent operations (searches, point lookups) without resetting session state or counters.
 - The pause-on-no-increase logic now uses consecutive unchanged reads (configurable via `config.yaml`).
+ 
+### Driver manager fixes (pre-last-commit)
+
+- Retry/backoff on portal and download: The developer portal fetch (XPath/regex) and the ZIP download now perform limited retries with exponential backoff to tolerate transient network/DNS failures.
+- Platform URL verification: If XPath parsing returns a version link for a different platform (for example `edgedriver_mac64.zip`), the manager now constructs the matching platform URL (e.g., `edgedriver_win64.zip`) for that version and checks that it exists before using it. This prevents downloading the wrong platform artifact and avoids accepting non-matching XPath links.
+- Richer return value: `ensure_latest_msedgedriver()` now returns `(path, installed_version, latest_available)` so callers can access both installed and available versions. Callers were updated (e.g., `main.py`) to remain compatible.
+- Small diagnostic scripts added under `tools/` (e.g., `diag_edge_driver.py`, `run_ensure.py`) to reproducibly inspect portal parsing and to force a driver install for debugging.
+
 
 ---
 
