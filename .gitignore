@@ -9,3 +9,4 @@ debug.png
 points_error.png
 searches.db
 *.db
+dist/
