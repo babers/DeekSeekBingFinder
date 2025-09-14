@@ -16,7 +16,6 @@ if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
 
 $root = Resolve-Path ".."
 $outDir = Join-Path $root "dist"
-$specDir = Join-Path $root "build"
 $main = Join-Path $root "main.py"
 
 if ($OneFile.IsPresent) {
