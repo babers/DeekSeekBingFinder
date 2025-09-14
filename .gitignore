@@ -10,3 +10,7 @@ points_error.png
 searches.db
 *.db
 dist/
+build/**
+!build/*.ps1
+!build/*.iss
+!build/*.md
