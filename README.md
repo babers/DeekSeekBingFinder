@@ -50,6 +50,22 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 
 3. No manual driver setup needed — the app will download/refresh `msedgedriver.exe` at startup.
 
+### Build a Windows executable (optional)
+
+ From PowerShell on Windows:
+
+```
+cd build
+./build_exe.ps1 -OneFile
+```
+
+ Output will be in `dist/`. If `--onefile` is used, a single `DeekSeekBingFinder.exe` is produced; otherwise a folder is created.
+
+### Create a Windows installer (optional)
+
+1. Install Inno Setup (https://jrsoftware.org/isinfo.php) and open `build/installer.iss`.
+2. Ensure you have built the app (`build_exe.ps1`) so `dist/DeekSeekBingFinder/` exists.
+3. Compile the installer; the output `DeekSeekBingFinder-Setup.exe` will be created in `build/`.
 ## Usage
 
 Run the main script:
@@ -86,6 +102,10 @@ Optional overrides at startup:
 - `config.yaml` — App configuration (URLs, selectors, paths, logging; optional WebDriver overrides)
 - `requirements.txt` — Python dependencies
 - `msedgedriver.exe` — Edge WebDriver binary (auto-managed)
+  - When packaged/installed, the app will place the driver, logs, and database in your per-user app data folder:
+    - Windows: `%LOCALAPPDATA%\DeekSeekBingFinder`
+    - macOS: `~/Library/Application Support/DeekSeekBingFinder`
+    - Linux: `~/.local/share/DeekSeekBingFinder`
 
 ## Configuration & Customization
 

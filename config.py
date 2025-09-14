@@ -1,6 +1,13 @@
-# config.py
+"""Configuration loader with sane defaults for packaged builds.
+
+If explicit paths are not provided in config.yaml, defaults are placed in a
+per-user app data directory so the app remains writable when installed.
+"""
+
 import yaml
 import logging
+import os
+from utils.paths import get_app_data_dir, resource_path
 
 class Config:
     """
@@ -45,14 +52,30 @@ class Config:
         self.logger.info("Configuration loaded successfully.")
 
     @classmethod
-    def from_yaml(cls, file_path='config.yaml'):
+    def from_yaml(cls, file_path: str | None = 'config.yaml'):
         """
         Loads configuration from a YAML file and creates a Config object.
         """
         try:
-            with open(file_path, 'r') as f:
+            # Resolve default config path for packaged builds
+            path = resource_path(file_path) if file_path else resource_path('config.yaml')
+            if not os.path.isfile(path):
+                # Also try raw provided path if resource resolution failed
+                path = file_path or 'config.yaml'
+            with open(path, 'r') as f:
                 config_data = yaml.safe_load(f)
-            return cls(config_data)
+            cfg = cls(config_data)
+
+            # Apply default paths if missing
+            app_dir = get_app_data_dir()
+            if not cfg.database_path:
+                cfg.database_path = os.path.join(app_dir, 'searches.db')
+            if not cfg.log_file_path:
+                cfg.log_file_path = os.path.join(app_dir, 'app.log')
+            if not cfg.webdriver_path:
+                cfg.webdriver_path = os.path.join(app_dir, 'msedgedriver.exe')
+
+            return cfg
         except FileNotFoundError:
             logging.error(f"Configuration file not found at {file_path}")
             raise
