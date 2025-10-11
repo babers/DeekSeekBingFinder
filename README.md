@@ -99,6 +99,7 @@ Optional overrides at startup:
 - `utils/logger.py` — Central logging setup (console + rotating file)
 - `utils/exceptions.py` — Structured exception types
 - `daily_topics.py` — Provides daily search topics
+  - Topics for each weekday are now selected from a shuffled pool so that searches use a random, non-repeating sequence of topics each run. Once the day's pool is exhausted it will be reshuffled and reused.
 - `config.yaml` — App configuration (URLs, selectors, paths, logging; optional WebDriver overrides)
 - `requirements.txt` — Python dependencies
 - `msedgedriver.exe` — Edge WebDriver binary (auto-managed)

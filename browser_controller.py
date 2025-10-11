@@ -131,8 +131,13 @@ class BrowserController:
             self.last_points = initial_points  # Ensure last_points is set to actual starting points
 
             today_topics = self.topics_provider.get_topics_for_today()
-            num_topics = len(today_topics)
-            topic_index = 0
+            # Build a shuffled pool of topics for today to avoid repeats until
+            # we've consumed the entire list. If the pool is exhausted we will
+            # reshuffle and continue (logged) so the search loop doesn't stall.
+            topic_pool = list(today_topics)
+            random.shuffle(topic_pool)
+            pool_idx = 0
+            pool_size = len(topic_pool)
             unchanged_points_counter = 0
 
             while self.running and self.get_current_points() < self.config.target_points:
@@ -140,8 +145,19 @@ class BrowserController:
                     self.logger.info("Stop event received, exiting search loop.")
                     break
 
-                term = today_topics[topic_index % num_topics]
-                topic_index += 1
+                # Draw next topic from the shuffled pool
+                if pool_size == 0:
+                    # Defensive fallback (shouldn't happen): use default term
+                    term = "general knowledge"
+                else:
+                    term = topic_pool[pool_idx]
+                    pool_idx += 1
+
+                    # If we've used all topics for today, reshuffle and continue
+                    if pool_idx >= pool_size:
+                        self.logger.info("All topics for today have been used; reshuffling topic pool for reuse.")
+                        random.shuffle(topic_pool)
+                        pool_idx = 0
 
                 if self.gui:
                     self.gui.set_current_topic(term)
