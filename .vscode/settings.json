@@ -1,8 +1,0 @@
-{
-    // Workspace Python interpreter path (ensures Run/Debug uses the same interpreter)
-    "python.defaultInterpreterPath": "D:\\Software Installation\\Python\\python.exe",
-    // Legacy fallback (older extension versions)
-    "python.pythonPath": "D:\\Software Installation\\Python\\python.exe",
-    // Keep the terminal integrated shell (PowerShell on Windows)
-    "terminal.integrated.defaultProfile.windows": "PowerShell"
-}

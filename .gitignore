@@ -14,3 +14,4 @@ build/**
 !build/*.ps1
 !build/*.iss
 !build/*.md
+.vscode/
