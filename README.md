@@ -99,7 +99,6 @@ Optional overrides at startup:
 - `utils/logger.py` — Central logging setup (console + rotating file)
 - `utils/exceptions.py` — Structured exception types
 - `daily_topics.py` — Provides daily search topics
-  - Topics for each weekday are now selected from a shuffled pool so that searches use a random, non-repeating sequence of topics each run. Once the day's pool is exhausted it will be reshuffled and reused.
 - `config.yaml` — App configuration (URLs, selectors, paths, logging; optional WebDriver overrides)
 - `requirements.txt` — Python dependencies
 - `msedgedriver.exe` — Edge WebDriver binary (auto-managed)
@@ -118,6 +117,11 @@ Optional overrides at startup:
 
 - CLI flags `--driver-url` and `--driver-version` override config and force an install before startup.
 - Edit `daily_topics.py` to change or expand search topics.
+
+Topic selection behavior
+-----------------------
+
+- The app now selects topics randomly for each day without repeats until the day's list is exhausted. This is implemented in `daily_topics.py` via `next_topic_for_today()` and used by the search loop. The original `get_topics_for_today()` remains available for backwards compatibility.
 
 ## Troubleshooting
 

@@ -1,5 +1,7 @@
 # daily_topics.py
 from datetime import datetime
+import random
+import time
 
 class DailyTopics:
     def __init__(self):
@@ -27,10 +29,43 @@ class DailyTopics:
             ]
         }
 
+        # Internal state for non-repeating random selection per day
+        self._current_day_key = None
+        self._shuffled_today_topics = []
+        self._shuffled_index = 0
+
     def get_topics_for_today(self):
         """Returns today's topics based on current day of week"""
         day_name = datetime.now().strftime('%A')
         return self.topics_by_day.get(day_name, self._get_default_topics())
+
+    def next_topic_for_today(self):
+        """Return the next topic for today, randomly selected without repetition.
+
+        This method maintains internal shuffled state per calendar day so that
+        topics are not repeated until the full set is exhausted. When the day
+        changes, the provider resets and reshuffles the new day's topics.
+        """
+        day_name = datetime.now().strftime('%A')
+        # If day changed or not initialized, reset shuffled list
+        if self._current_day_key != day_name or not self._shuffled_today_topics:
+            topics = list(self.topics_by_day.get(day_name, self._get_default_topics()))
+            random_seed = int(datetime.now().timestamp())
+            random.Random(random_seed).shuffle(topics)
+            self._shuffled_today_topics = topics
+            self._shuffled_index = 0
+            self._current_day_key = day_name
+
+        if self._shuffled_index >= len(self._shuffled_today_topics):
+            # All topics for today exhausted; reshuffle to start again (rare)
+            topics = list(self._shuffled_today_topics)
+            random.Random(int(time.time())).shuffle(topics)
+            self._shuffled_today_topics = topics
+            self._shuffled_index = 0
+
+        topic = self._shuffled_today_topics[self._shuffled_index]
+        self._shuffled_index += 1
+        return topic
 
     def _get_default_topics(self):
         """Fallback topics if day not found"""

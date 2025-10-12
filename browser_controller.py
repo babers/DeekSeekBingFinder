@@ -130,14 +130,12 @@ class BrowserController:
             self.data_manager.rewards_points = initial_points
             self.last_points = initial_points  # Ensure last_points is set to actual starting points
 
-            today_topics = self.topics_provider.get_topics_for_today()
-            # Build a shuffled pool of topics for today to avoid repeats until
-            # we've consumed the entire list. If the pool is exhausted we will
-            # reshuffle and continue (logged) so the search loop doesn't stall.
-            topic_pool = list(today_topics)
-            random.shuffle(topic_pool)
-            pool_idx = 0
-            pool_size = len(topic_pool)
+            # Use the new non-repeating random provider when available.
+            use_next_topic = hasattr(self.topics_provider, 'next_topic_for_today')
+            if not use_next_topic:
+                today_topics = self.topics_provider.get_topics_for_today()
+                num_topics = len(today_topics)
+                topic_index = 0
             unchanged_points_counter = 0
 
             while self.running and self.get_current_points() < self.config.target_points:
@@ -145,19 +143,11 @@ class BrowserController:
                     self.logger.info("Stop event received, exiting search loop.")
                     break
 
-                # Draw next topic from the shuffled pool
-                if pool_size == 0:
-                    # Defensive fallback (shouldn't happen): use default term
-                    term = "general knowledge"
+                if use_next_topic:
+                    term = self.topics_provider.next_topic_for_today()
                 else:
-                    term = topic_pool[pool_idx]
-                    pool_idx += 1
-
-                    # If we've used all topics for today, reshuffle and continue
-                    if pool_idx >= pool_size:
-                        self.logger.info("All topics for today have been used; reshuffling topic pool for reuse.")
-                        random.shuffle(topic_pool)
-                        pool_idx = 0
+                    term = today_topics[topic_index % num_topics]
+                    topic_index += 1
 
                 if self.gui:
                     self.gui.set_current_topic(term)
