@@ -112,10 +112,14 @@ def main():
 
         installed = False
         if driver_candidate and os.path.exists(os.path.abspath(driver_candidate)):
-            # already present
-            config.webdriver_path = os.path.abspath(driver_candidate)
-            installed = True
-            logging.getLogger(__name__).info(f"WebDriver present at startup: {config.webdriver_path}")
+            # Check the driver is actually usable (reports a version)
+            from utils.edge_driver_manager import is_driver_usable
+            if is_driver_usable(driver_candidate, logging.getLogger(__name__)):
+                config.webdriver_path = os.path.abspath(driver_candidate)
+                installed = True
+                logging.getLogger(__name__).info(f"WebDriver present and usable at startup: {config.webdriver_path}")
+            else:
+                logging.getLogger(__name__).warning(f"WebDriver found at {driver_candidate} but it is not usable; attempting re-install.")
         else:
             # Try a few retries to fetch/install the driver at startup.
             retries = 3
