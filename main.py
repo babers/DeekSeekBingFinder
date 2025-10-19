@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 import os
+import time
 from config import Config
 from utils.logger import setup_logging
 from utils.edge_driver_manager import (
@@ -92,6 +93,67 @@ def main():
         config.webdriver_path = updated_path
     except Exception as e:
         logging.getLogger(__name__).warning(f"Edge WebDriver precheck failed: {e}")
+
+    # Verify that the driver file actually exists on disk. If the initial
+    # precheck did not produce a driver (or it was removed), attempt a few
+    # retries here at startup where the download/ensure logic already runs.
+    try:
+        # determine candidate path returned above or from config
+        driver_candidate = None
+        if 'updated_path' in locals() and updated_path:
+            driver_candidate = updated_path
+        elif getattr(config, 'webdriver_path', None):
+            driver_candidate = config.webdriver_path
+
+        def _normalize_return(res):
+            if isinstance(res, tuple) and len(res) >= 1:
+                return res[0]
+            return res
+
+        installed = False
+        if driver_candidate and os.path.exists(os.path.abspath(driver_candidate)):
+            # already present
+            config.webdriver_path = os.path.abspath(driver_candidate)
+            installed = True
+            logging.getLogger(__name__).info(f"WebDriver present at startup: {config.webdriver_path}")
+        else:
+            # Try a few retries to fetch/install the driver at startup.
+            retries = 3
+            for attempt in range(1, retries + 1):
+                try:
+                    logging.getLogger(__name__).info(f"Startup WebDriver install attempt {attempt}/{retries}")
+                    if args.driver_url:
+                        res = ensure_msedgedriver_from_url(args.driver_url, config.webdriver_path or 'msedgedriver.exe')
+                    elif args.driver_version:
+                        res = ensure_msedgedriver_version(args.driver_version, config.webdriver_path or 'msedgedriver.exe')
+                    elif getattr(config, 'webdriver_url', None):
+                        res = ensure_msedgedriver_from_url(config.webdriver_url, config.webdriver_path or 'msedgedriver.exe')
+                    elif getattr(config, 'webdriver_version', None):
+                        res = ensure_msedgedriver_version(config.webdriver_version, config.webdriver_path or 'msedgedriver.exe')
+                    else:
+                        res = ensure_latest_msedgedriver(config.webdriver_path or 'msedgedriver.exe')
+
+                    candidate_path = _normalize_return(res)
+                    if candidate_path and os.path.exists(os.path.abspath(candidate_path)):
+                        config.webdriver_path = os.path.abspath(candidate_path)
+                        installed = True
+                        logging.getLogger(__name__).info(f"WebDriver installed at startup: {config.webdriver_path}")
+                        break
+                    else:
+                        logging.getLogger(__name__).warning(f"Attempt {attempt} did not produce a usable driver at {candidate_path}")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Startup WebDriver install attempt {attempt} failed: {e}")
+
+                # exponential backoff between attempts
+                time.sleep(2 ** attempt)
+
+        if not installed:
+            logging.getLogger(__name__).warning(
+                "msedgedriver.exe not found after startup attempts. The GUI will still start, "
+                "but searches requiring the driver will fail until a valid driver is provided."
+            )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Failed to verify/install WebDriver at startup: {e}")
 
     # Create and run the application
     app = Application(config)
