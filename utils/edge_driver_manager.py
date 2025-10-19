@@ -73,6 +73,31 @@ def get_local_driver_version(driver_path: str, logger: Optional[logging.Logger] 
         return None
 
 
+def is_driver_usable(driver_path: str, logger: Optional[logging.Logger] = None) -> bool:
+    """Return True if the driver exists and reports a parsable version.
+
+    This is a stronger check than os.path.exists() because it attempts to
+    invoke the binary and parse its --version output. Use this to avoid
+    treating corrupt or incompatible driver files as usable.
+    """
+    log = logger or logging.getLogger(__name__)
+    try:
+        if not driver_path:
+            return False
+        abs_path = os.path.abspath(driver_path)
+        if not os.path.exists(abs_path):
+            return False
+        ver = get_local_driver_version(abs_path, log)
+        if ver:
+            log.debug(f"Driver at {abs_path} appears usable (version {ver}).")
+            return True
+        log.debug(f"Driver at {abs_path} exists but did not report a version.")
+        return False
+    except Exception as e:
+        log.debug(f"is_driver_usable check failed for {driver_path}: {e}")
+        return False
+
+
 # Removed deprecated/invalid LATEST_STABLE endpoints; we now rely solely on the
 # official developer portal content to infer the latest version and build the URL.
 
