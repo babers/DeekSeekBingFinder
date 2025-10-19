@@ -2,11 +2,15 @@
 
 ## Workflow Overview
 
+
 1. **Startup**: Run `main.py` to launch the Tkinter GUI and initialize all modules.
 
-- Before the GUI starts, the app ensures the correct Edge WebDriver is installed by parsing the Microsoft developer portal.
-- Preferred method: XPath-based parsing with `lxml`; logs matched node counts, extracted href, and parsed version.
-- Fallback: Regex-based portal parsing filtered by platform (`win64`/`win32`).
+	 - At startup, the app checks for a local `msedgedriver.exe`.
+	 - If the driver is missing or outdated, it downloads and replaces it with the latest stable version from the Microsoft portal.
+	 - The update event is explicitly logged:
+		 - "Local msedgedriver version X is older than latest available Y. Update will be performed."
+		 - "Starting download and update..." and "Update complete: Installed msedgedriver..."
+	 - The workflow uses robust XPath parsing (with lxml) when available, and a block-based text fallback otherwise, always preferring the stable channel and platform-specific (win64) links.
 
 1. **User Action**: Click "Start Searching" in the GUI to begin automated Bing searches.
 1. **Search Automation**: `BrowserController` uses Selenium to perform Bing searches with daily/random topics.

@@ -50,6 +50,16 @@ Automate Bing searches to maximize Microsoft Rewards points using Selenium and a
 
 3. No manual driver setup needed — the app will download/refresh `msedgedriver.exe` at startup.
 
+## Edge WebDriver Startup Workflow (2025 update)
+
+- On program startup, the app checks for a local `msedgedriver.exe`.
+- If the driver is missing or outdated (older than the latest available from the Microsoft portal), the app automatically downloads and replaces it.
+- The update event is now explicitly logged:
+  - If an older version is detected, logs: "Local msedgedriver version X is older than latest available Y. Update will be performed."
+  - Logs the start and completion of the update: "Starting download and update..." and "Update complete: Installed msedgedriver..."
+- The workflow uses robust XPath parsing (with lxml) when available, and a block-based text fallback otherwise, always preferring the stable channel and platform-specific (win64) links.
+
+
 ### Build a Windows executable (optional)
 
  From PowerShell on Windows:
