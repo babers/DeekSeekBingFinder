@@ -7,6 +7,7 @@ print(f"Loading {__name__} module")
 import tkinter as tk
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import MaxNLocator
 from threading import Thread
 from tkinter import ttk
 from tkinter import messagebox
@@ -134,11 +135,10 @@ class GUI:
         x_init = list(range(1, 31))
         y_init = [0] * 30
         self.ax.plot(x_init, y_init, marker='o', linestyle='-', color='b')
-        self.ax.set_xlabel('Search Number')
         self.ax.set_ylabel('Rewards Points')
         self.ax.set_title('Searches vs Rewards Points')
         self.ax.grid(True)
-        from matplotlib.ticker import MaxNLocator
+        self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         self.canvas.draw()
@@ -287,7 +287,6 @@ class GUI:
         self.ax.set_ylabel('Search Number')
         self.ax.set_title('Rewards Points vs Searches')
         self.ax.grid(True)
-        from matplotlib.ticker import MaxNLocator
         self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         self.canvas.draw()
